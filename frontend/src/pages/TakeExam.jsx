@@ -172,8 +172,8 @@ export default function TakeExam() {
         </div>
 
         {/* Mobile question strip */}
-        <div className="lg:hidden overflow-x-auto pb-2">
-          <div className="flex gap-1.5 min-w-max">
+        <div className="lg:hidden overflow-x-auto overflow-y-hidden pb-2 max-w-full">
+          <div className="flex gap-1.5 w-max">
             {questions.map((q, i) => (
               <button key={q.id} onClick={() => setCurrentIndex(i)}
                 className={`w-10 h-10 rounded-lg text-xs font-medium transition flex-shrink-0 ${

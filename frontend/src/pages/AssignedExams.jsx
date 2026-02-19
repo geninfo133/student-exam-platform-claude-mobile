@@ -27,7 +27,7 @@ export default function AssignedExams() {
 
     setGenerating(assignedExam.id);
     try {
-      const data = { subject_id: assignedExam.subject };
+      const data = { subject_id: assignedExam.subject, assigned_exam_id: assignedExam.id };
       const res = await api.post('/api/exams/generate/', data);
       sessionStorage.setItem(`exam_${res.data.exam_id}`, JSON.stringify(res.data));
       navigate(`/exam/${res.data.exam_id}`);
@@ -81,7 +81,7 @@ export default function AssignedExams() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {isCompleted && (
+                    {isCompleted && attempt?.grading_status === 'COMPLETED' && (
                       <>
                         <div className={`text-lg font-bold ${attempt.percentage >= 60 ? 'text-green-600' : attempt.percentage >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>
                           {Math.round(attempt.percentage)}%
@@ -93,6 +93,11 @@ export default function AssignedExams() {
                           View Result
                         </button>
                       </>
+                    )}
+                    {isCompleted && attempt?.grading_status !== 'COMPLETED' && (
+                      <span className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium">
+                        Submitted - Pending Review
+                      </span>
                     )}
                     {isInProgress && (
                       <button

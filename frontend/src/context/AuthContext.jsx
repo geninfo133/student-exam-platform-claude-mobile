@@ -31,8 +31,10 @@ export function AuthProvider({ children }) {
     const res = await api.post('/api/auth/login/', { username, password });
     localStorage.setItem('access_token', res.data.access);
     localStorage.setItem('refresh_token', res.data.refresh);
-    await fetchProfile();
-    return res.data;
+    // Fetch profile and return user data so callers can navigate immediately
+    const profileRes = await api.get('/api/auth/profile/');
+    setUser(profileRes.data);
+    return profileRes.data;
   };
 
   const register = async (data) => {

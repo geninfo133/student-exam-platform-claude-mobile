@@ -15,23 +15,32 @@ class User(AbstractUser):
         ('ICSE', 'ICSE'),
     ]
     GRADE_CHOICES = [
-        ('9', 'Class 9'),
+        ('1', 'Class 1'), ('2', 'Class 2'), ('3', 'Class 3'),
+        ('4', 'Class 4'), ('5', 'Class 5'), ('6', 'Class 6'),
+        ('7', 'Class 7'), ('8', 'Class 8'), ('9', 'Class 9'),
         ('10', 'Class 10'),
+    ]
+    SECTION_CHOICES = [
+        ('A', 'Section A'), ('B', 'Section B'), ('C', 'Section C'),
+        ('D', 'Section D'), ('E', 'Section E'),
     ]
 
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='student')
     school = models.ForeignKey(
         'self', null=True, blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name='members',
         help_text='Links teachers/students to their school account',
     )
     student_id = models.CharField(max_length=50, blank=True, help_text='School-assigned student ID (e.g. STU-2024-001)')
+    teacher_id = models.CharField(max_length=50, blank=True, help_text='School-assigned teacher ID (e.g. TCH-2024-001)')
 
+    profile_photo = models.ImageField(upload_to='profile_photos/%Y/%m/', blank=True, null=True)
     phone_number = models.CharField(max_length=15, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     address = models.TextField(blank=True)
     grade = models.CharField(max_length=2, choices=GRADE_CHOICES, default='10')
+    section = models.CharField(max_length=1, choices=SECTION_CHOICES, default='A', blank=True)
     board = models.CharField(max_length=10, choices=BOARD_CHOICES, default='CBSE')
     school_name = models.CharField(max_length=200, blank=True)
     parent_phone = models.CharField(max_length=15, blank=True)
@@ -61,6 +70,18 @@ class User(AbstractUser):
 
     class Meta:
         db_table = 'users'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'student_id'],
+                name='unique_student_id_per_school',
+                condition=models.Q(student_id__gt=''),
+            ),
+            models.UniqueConstraint(
+                fields=['school', 'teacher_id'],
+                name='unique_teacher_id_per_school',
+                condition=models.Q(teacher_id__gt=''),
+            ),
+        ]
 
 
 class SiteImage(models.Model):

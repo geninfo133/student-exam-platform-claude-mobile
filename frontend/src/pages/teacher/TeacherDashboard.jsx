@@ -33,29 +33,46 @@ export default function TeacherDashboard() {
   }
 
   const statCards = [
-    { label: 'Papers Uploaded', value: stats?.papers_count ?? 0, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: 'Assigned Exams', value: stats?.assigned_exams_count ?? 0, color: 'text-purple-600', bg: 'bg-purple-50' },
-    { label: 'Students', value: stats?.students_count ?? 0, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'Pending Reviews', value: stats?.pending_reviews ?? 0, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+    { label: 'Papers Uploaded', value: stats?.papers_count ?? 0, color: 'text-indigo-600' },
+    { label: 'Assigned Exams', value: stats?.assigned_exams_count ?? 0, color: 'text-purple-600' },
+    { label: 'Students', value: stats?.students_count ?? 0, color: 'text-green-600' },
+    { label: 'Pending Reviews', value: stats?.pending_reviews ?? 0, color: 'text-yellow-600' },
   ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold">
-          Welcome, {user?.first_name || user?.username}!
-        </h1>
-        <p className="mt-2 text-indigo-100">Teacher Dashboard</p>
-        <div className="flex gap-3 mt-4">
-          <Link to="/teacher/upload-paper" className="inline-block bg-white text-indigo-700 px-6 py-2.5 rounded-lg font-medium hover:bg-indigo-50 transition">
+        <div className="flex items-center gap-4 mb-4">
+          {user?.profile_photo ? (
+            <img src={user.profile_photo} alt="Profile" className="w-16 h-16 rounded-full object-cover border-2 border-white/50 shrink-0" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold shrink-0">
+              {(user?.first_name?.[0] || user?.username?.[0] || '?').toUpperCase()}
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">
+              Welcome, {user?.first_name || user?.username}!
+            </h1>
+            <p className="mt-1 text-indigo-100">Teacher Dashboard</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3 mt-4">
+          <Link to="/teacher/upload-paper" className="bg-white text-indigo-700 px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-50 transition text-sm">
             Upload Paper
           </Link>
-          <Link to="/teacher/generate-paper" className="inline-block bg-indigo-500 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-indigo-400 transition border border-indigo-400">
+          <Link to="/teacher/generate-paper" className="bg-indigo-500 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-400 transition border border-indigo-400 text-sm">
             Generate Paper
           </Link>
-          <Link to="/teacher/create-exam" className="inline-block bg-purple-500 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-purple-400 transition border border-purple-400">
+          <Link to="/teacher/create-exam" className="bg-purple-500 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-purple-400 transition border border-purple-400 text-sm">
             Create Exam
+          </Link>
+          <Link to="/teacher/upload-handwritten" className="bg-teal-500 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-teal-400 transition border border-teal-400 text-sm">
+            Upload Sheets
+          </Link>
+          <Link to="/teacher/study-materials" className="bg-emerald-500 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-emerald-400 transition border border-emerald-400 text-sm">
+            Study Materials
           </Link>
         </div>
       </div>
@@ -98,6 +115,28 @@ export default function TeacherDashboard() {
                 </svg>
               </div>
             </Link>
+            <Link to="/teacher/handwritten" className="block bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition border border-gray-100">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-semibold text-gray-800">Handwritten Papers</h3>
+                  <p className="text-sm text-gray-500">Grade handwritten answer sheets</p>
+                </div>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </Link>
+            <Link to="/teacher/study-materials" className="block bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition border border-gray-100">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-semibold text-gray-800">Study Materials</h3>
+                  <p className="text-sm text-gray-500">Create and manage study content</p>
+                </div>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </Link>
           </div>
         </div>
 
@@ -126,9 +165,9 @@ export default function TeacherDashboard() {
                   <tbody>
                     {recentExams.map((exam, idx) => (
                       <tr key={exam.id || idx} className="border-b border-gray-50 hover:bg-gray-50 transition">
-                        <td className="px-5 py-3 text-gray-800 font-medium">{exam.student_name}</td>
-                        <td className="px-5 py-3 text-gray-600">{exam.subject_name || exam.subject}</td>
-                        <td className="px-5 py-3 text-right text-gray-800">{exam.score}/{exam.total_marks}</td>
+                        <td className="px-5 py-3 text-gray-800 font-medium">{exam.student}</td>
+                        <td className="px-5 py-3 text-gray-600">{exam.subject}</td>
+                        <td className="px-5 py-3 text-right text-gray-800">{exam.score}/{exam.total_marks || 50}</td>
                         <td className="px-5 py-3 text-right">
                           <span className={`font-bold ${
                             exam.percentage >= 60 ? 'text-green-600' :

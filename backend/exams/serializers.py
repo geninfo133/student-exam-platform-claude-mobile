@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     ExamType, Subject, Chapter, Question, UserExam, UserAnswer,
     ExamAnalysis, ExamPaper, AssignedExam, TeacherAssignment,
+    HandwrittenExam,
 )
 
 User = get_user_model()
@@ -101,6 +102,7 @@ class SubmitAnswerSerializer(serializers.Serializer):
 class GenerateExamSerializer(serializers.Serializer):
     subject_id = serializers.IntegerField()
     chapter_id = serializers.IntegerField(required=False)
+    assigned_exam_id = serializers.IntegerField(required=False)
 
 
 class ExamAnalysisSerializer(serializers.ModelSerializer):
@@ -261,6 +263,7 @@ class StudentAssignedExamSerializer(serializers.ModelSerializer):
             return {
                 'exam_id': attempt.id,
                 'status': attempt.status,
+                'grading_status': attempt.grading_status,
                 'score': attempt.score,
                 'percentage': attempt.percentage,
             }
@@ -289,13 +292,13 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
     teacher_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     student_count = serializers.SerializerMethodField()
-    students_detail = serializers.SerializerMethodField()
+    grade_display = serializers.SerializerMethodField()
 
     class Meta:
         model = TeacherAssignment
         fields = [
             'id', 'teacher', 'teacher_name', 'subject', 'subject_name',
-            'student_count', 'students_detail', 'created_at',
+            'grade', 'section', 'grade_display', 'student_count', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -303,16 +306,52 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
         return obj.teacher.get_full_name() or obj.teacher.username
 
     def get_student_count(self, obj):
-        return obj.students.count()
+        return obj.get_students().count()
 
-    def get_students_detail(self, obj):
-        return [
-            {'id': s.id, 'name': s.get_full_name() or s.username, 'username': s.username}
-            for s in obj.students.all()
-        ]
+    def get_grade_display(self, obj):
+        return f"Class {obj.grade}{obj.section}"
 
 
 class TeacherAssignmentCreateSerializer(serializers.Serializer):
     teacher_id = serializers.IntegerField()
     subject_id = serializers.IntegerField()
-    student_ids = serializers.ListField(child=serializers.IntegerField(), required=False, default=[])
+    grade = serializers.CharField(max_length=2)
+    section = serializers.CharField(max_length=1)
+
+
+# --- HandwrittenExam serializers ---
+
+class HandwrittenExamSerializer(serializers.ModelSerializer):
+    teacher_name = serializers.SerializerMethodField()
+    student_display_name = serializers.SerializerMethodField()
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+
+    class Meta:
+        model = HandwrittenExam
+        fields = [
+            'id', 'title', 'subject', 'subject_name',
+            'teacher', 'teacher_name',
+            'student', 'student_name', 'student_display_name',
+            'answer_sheet', 'question_paper',
+            'total_marks', 'obtained_marks', 'percentage',
+            'status', 'grading_data', 'error_message',
+            'created_at',
+        ]
+        read_only_fields = [
+            'id', 'teacher', 'obtained_marks', 'percentage',
+            'status', 'grading_data', 'error_message', 'created_at',
+        ]
+
+    def get_teacher_name(self, obj):
+        return obj.teacher.get_full_name() or obj.teacher.username
+
+    def get_student_display_name(self, obj):
+        if obj.student:
+            return obj.student.get_full_name() or obj.student.username
+        return obj.student_name or 'Unknown'
+
+
+class HandwrittenExamUploadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HandwrittenExam
+        fields = ['title', 'subject', 'student', 'student_name', 'answer_sheet', 'question_paper', 'total_marks']

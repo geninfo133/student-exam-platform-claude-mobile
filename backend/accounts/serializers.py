@@ -39,11 +39,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'phone_number', 'date_of_birth', 'grade', 'board',
+            'phone_number', 'date_of_birth', 'grade', 'section', 'board',
             'school_name', 'parent_phone', 'created_at',
-            'role', 'school', 'student_id', 'school_account_name',
+            'role', 'school', 'student_id', 'teacher_id', 'school_account_name',
+            'profile_photo',
         ]
-        read_only_fields = ['id', 'username', 'created_at', 'role', 'school', 'student_id']
+        read_only_fields = ['id', 'username', 'created_at', 'role', 'school', 'student_id', 'teacher_id']
 
     def get_school_account_name(self, obj):
         if obj.school:
@@ -62,7 +63,7 @@ class SchoolCreateTeacherSerializer(serializers.ModelSerializer):
         fields = [
             'username', 'email', 'password',
             'first_name', 'last_name', 'phone_number',
-            'subject_ids',
+            'teacher_id', 'subject_ids',
         ]
 
     def create(self, validated_data):
@@ -96,23 +97,17 @@ class SchoolCreateTeacherSerializer(serializers.ModelSerializer):
 
 class SchoolCreateStudentSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
-    teacher_ids = serializers.ListField(
-        child=serializers.IntegerField(), required=False, default=[], write_only=True,
-    )
 
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password',
             'first_name', 'last_name', 'phone_number',
-            'grade', 'student_id', 'parent_phone',
-            'teacher_ids',
+            'grade', 'section', 'student_id', 'parent_phone',
         ]
 
     def create(self, validated_data):
-        teacher_ids = validated_data.pop('teacher_ids', [])
         request_user = self.context['request'].user
-        # Both school and teacher can create students
         school = request_user if request_user.role == 'school' else request_user.school
         password = validated_data.pop('password')
         student = User(
@@ -124,16 +119,6 @@ class SchoolCreateStudentSerializer(serializers.ModelSerializer):
         )
         student.set_password(password)
         student.save()
-
-        # Add student to selected teachers' assignments
-        if teacher_ids:
-            from exams.models import TeacherAssignment
-            assignments = TeacherAssignment.objects.filter(
-                school=school, teacher_id__in=teacher_ids,
-            )
-            for assignment in assignments:
-                assignment.students.add(student)
-
         return student
 
 
@@ -144,7 +129,7 @@ class MemberListSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'role', 'student_id', 'grade', 'phone_number',
+            'role', 'student_id', 'teacher_id', 'grade', 'section', 'phone_number',
             'is_active', 'created_at', 'assigned_teachers',
         ]
 
@@ -152,7 +137,7 @@ class MemberListSerializer(serializers.ModelSerializer):
         if obj.role == 'student':
             from exams.models import TeacherAssignment
             assignments = TeacherAssignment.objects.filter(
-                students=obj,
+                school=obj.school, grade=obj.grade, section=obj.section,
             ).select_related('teacher', 'subject')
             return [
                 {
@@ -167,7 +152,11 @@ class MemberListSerializer(serializers.ModelSerializer):
                 teacher=obj,
             ).select_related('subject')
             return [
-                {'subject_name': a.subject.name}
+                {
+                    'subject_name': a.subject.name,
+                    'grade': a.grade,
+                    'section': a.section,
+                }
                 for a in assignments
             ]
         return []

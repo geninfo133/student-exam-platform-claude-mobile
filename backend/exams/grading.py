@@ -114,7 +114,7 @@ def _fallback_grade(user_answer):
     user_answer.save()
 
 
-def grade_exam_async(user_exam_id):
+def grade_exam_async(user_exam_id, include_analysis=False):
     """Grade an entire exam. Called in a background thread."""
     from .models import UserExam, UserAnswer
     from .analysis import generate_analysis
@@ -164,11 +164,11 @@ def grade_exam_async(user_exam_id):
         user_exam.answered_questions = answered_count
         user_exam.unanswered = user_exam.total_questions - answered_count
 
-        # Phase 3: Generate analysis
-        user_exam.grading_status = 'ANALYZING'
-        user_exam.save()
-
-        generate_analysis(user_exam)
+        # Phase 3: Generate analysis (only if requested)
+        if include_analysis:
+            user_exam.grading_status = 'ANALYZING'
+            user_exam.save()
+            generate_analysis(user_exam)
 
         user_exam.grading_status = 'COMPLETED'
         user_exam.save()

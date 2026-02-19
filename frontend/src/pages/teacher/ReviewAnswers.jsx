@@ -10,6 +10,8 @@ export default function ReviewAnswers() {
   const [reviewData, setReviewData] = useState({});
   const [saving, setSaving] = useState({});
   const [saved, setSaved] = useState({});
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisDone, setAnalysisDone] = useState(false);
 
   useEffect(() => {
     const fetchReview = async () => {
@@ -64,6 +66,21 @@ export default function ReviewAnswers() {
       alert(err.response?.data?.detail || 'Failed to save review');
     } finally {
       setSaving((prev) => ({ ...prev, [answerId]: false }));
+    }
+  };
+
+  const handleRunAnalysis = async () => {
+    setAnalyzing(true);
+    try {
+      await api.post(`/api/exams/${examId}/analyze/`);
+      setAnalysisDone(true);
+      // Refetch to get updated analysis
+      const res = await api.get(`/api/exams/review/${examId}/`);
+      setExam(res.data);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to generate analysis');
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -134,6 +151,59 @@ export default function ReviewAnswers() {
           </div>
         </div>
       </div>
+
+      {/* Analysis Section */}
+      {exam.analysis ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
+          <h2 className="text-lg font-bold text-gray-800 mb-4">Analysis</h2>
+          <div className="grid md:grid-cols-3 gap-4">
+            {exam.analysis.strengths?.length > 0 && (
+              <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                <h3 className="text-sm font-semibold text-green-700 mb-2">Strengths</h3>
+                <ul className="text-sm text-green-800 space-y-1">
+                  {exam.analysis.strengths.map((s, i) => <li key={i}>- {s}</li>)}
+                </ul>
+              </div>
+            )}
+            {exam.analysis.weaknesses?.length > 0 && (
+              <div className="bg-red-50 rounded-lg p-4 border border-red-100">
+                <h3 className="text-sm font-semibold text-red-700 mb-2">Weaknesses</h3>
+                <ul className="text-sm text-red-800 space-y-1">
+                  {exam.analysis.weaknesses.map((w, i) => <li key={i}>- {w}</li>)}
+                </ul>
+              </div>
+            )}
+            {exam.analysis.recommendations?.length > 0 && (
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                <h3 className="text-sm font-semibold text-blue-700 mb-2">Recommendations</h3>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  {exam.analysis.recommendations.map((r, i) => <li key={i}>- {r}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 mb-8">
+          <button
+            onClick={handleRunAnalysis}
+            disabled={analyzing}
+            className="bg-purple-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-purple-700 transition text-sm disabled:opacity-50 flex items-center gap-2"
+          >
+            {analyzing ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Analyzing...
+              </>
+            ) : analysisDone ? (
+              'Analysis Generated'
+            ) : (
+              'Run Analysis'
+            )}
+          </button>
+          <span className="text-sm text-gray-500">Generate strengths, weaknesses, and recommendations</span>
+        </div>
+      )}
 
       {/* All Answers */}
       <div className="space-y-4 mb-8">

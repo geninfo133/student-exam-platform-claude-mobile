@@ -8,15 +8,14 @@ const initialForm = {
   first_name: '',
   last_name: '',
   phone_number: '',
-  grade: '9',
+  grade: '',
+  section: '',
   student_id: '',
   parent_phone: '',
-  teacher_ids: [],
 };
 
 export default function ManageStudents() {
   const [students, setStudents] = useState([]);
-  const [teachers, setTeachers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -26,6 +25,10 @@ export default function ManageStudents() {
   const [message, setMessage] = useState({ text: '', type: '' });
   const [deleting, setDeleting] = useState(null);
   const [bgImages, setBgImages] = useState({});
+  const [showPassword, setShowPassword] = useState(false);
+  const [searchName, setSearchName] = useState('');
+  const [filterGrade, setFilterGrade] = useState('');
+  const [filterSection, setFilterSection] = useState('');
 
   const fetchStudents = async (pageNum) => {
     setLoading(true);
@@ -46,33 +49,14 @@ export default function ManageStudents() {
     }
   };
 
-  const fetchTeachers = async () => {
-    try {
-      const res = await api.get('/api/auth/members/', { params: { role: 'teacher' } });
-      setTeachers(res.data.results || res.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   useEffect(() => {
     api.get('/api/site-images/').then(res => setBgImages(res.data)).catch(() => {});
     fetchStudents(page);
-    fetchTeachers();
   }, [page]);
 
   const showMessage = (text, type = 'success') => {
     setMessage({ text, type });
     setTimeout(() => setMessage({ text: '', type: '' }), 4000);
-  };
-
-  const toggleTeacher = (id) => {
-    setFormData((prev) => {
-      const ids = prev.teacher_ids.includes(id)
-        ? prev.teacher_ids.filter((tid) => tid !== id)
-        : [...prev.teacher_ids, id];
-      return { ...prev, teacher_ids: ids };
-    });
   };
 
   const handleCreate = async (e) => {
@@ -170,6 +154,47 @@ export default function ManageStudents() {
         </button>
       </div>
 
+      {/* Search & Filter Bar */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input
+            type="text"
+            placeholder="Search by name..."
+            value={searchName}
+            onChange={(e) => setSearchName(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
+          />
+          <select
+            value={filterGrade}
+            onChange={(e) => setFilterGrade(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm bg-white"
+          >
+            <option value="">All Classes</option>
+            {[1,2,3,4,5,6,7,8,9,10].map(g => (
+              <option key={g} value={String(g)}>Class {g}</option>
+            ))}
+          </select>
+          <select
+            value={filterSection}
+            onChange={(e) => setFilterSection(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm bg-white"
+          >
+            <option value="">All Sections</option>
+            {['A','B','C','D','E'].map(s => (
+              <option key={s} value={s}>Section {s}</option>
+            ))}
+          </select>
+          {(searchName || filterGrade || filterSection) && (
+            <button
+              onClick={() => { setSearchName(''); setFilterGrade(''); setFilterSection(''); }}
+              className="text-sm text-indigo-600 font-medium hover:underline self-center"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Create Form */}
       {showForm && (
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
@@ -232,15 +257,33 @@ export default function ManageStudents() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
-                <input
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  placeholder="Enter password"
-                />
+                <div className="relative">
+                  <input
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2.5 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                    placeholder="Enter password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {showPassword ? (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.59 6.59m7.532 7.532l3.29 3.29M3 3l18 18" />
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number</label>
@@ -254,10 +297,10 @@ export default function ManageStudents() {
               </div>
             </div>
 
-            {/* Row 4: Grade + Student ID */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Row 4: Grade + Section */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Grade *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
                 <select
                   name="grade"
                   value={formData.grade}
@@ -265,8 +308,25 @@ export default function ManageStudents() {
                   required
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
                 >
-                  <option value="9">Class 9</option>
-                  <option value="10">Class 10</option>
+                  <option value="">Select Class</option>
+                  {[1,2,3,4,5,6,7,8,9,10].map(g => (
+                    <option key={g} value={String(g)}>Class {g}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Section *</label>
+                <select
+                  name="section"
+                  value={formData.section}
+                  onChange={handleChange}
+                  required
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
+                >
+                  <option value="">Select Section</option>
+                  {['A','B','C','D','E'].map(s => (
+                    <option key={s} value={s}>Section {s}</option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -293,34 +353,6 @@ export default function ManageStudents() {
                   placeholder="Enter parent phone"
                 />
               </div>
-            </div>
-
-            {/* Assign to Teachers */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Assign to Teacher(s)</label>
-              {teachers.length === 0 ? (
-                <p className="text-sm text-gray-400">No teachers created yet. Create teachers first to assign students.</p>
-              ) : (
-                <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto space-y-2 bg-gray-50/50">
-                  {teachers.map((t) => (
-                    <label key={t.id} className="flex items-center gap-2 cursor-pointer hover:bg-white px-2 py-1.5 rounded-md transition">
-                      <input
-                        type="checkbox"
-                        checked={formData.teacher_ids.includes(t.id)}
-                        onChange={() => toggleTeacher(t.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-gray-700">{t.first_name} {t.last_name}</span>
-                      <span className="text-xs text-gray-400">@{t.username}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-              {formData.teacher_ids.length > 0 && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Student will be added to all subject assignments of the selected teacher(s).
-                </p>
-              )}
             </div>
 
             <div className="flex gap-3 pt-2">
@@ -358,61 +390,82 @@ export default function ManageStudents() {
             Add your first student
           </button>
         </div>
-      ) : (
+      ) : (() => {
+        const filtered = students.filter((s) => {
+          const name = `${s.first_name} ${s.last_name} ${s.username}`.toLowerCase();
+          if (searchName && !name.includes(searchName.toLowerCase())) return false;
+          if (filterGrade && s.grade !== filterGrade) return false;
+          if (filterSection && s.section !== filterSection) return false;
+          return true;
+        });
+        return filtered.length === 0 ? (
+          <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
+            <p className="text-gray-500">No students match your filters.</p>
+          </div>
+        ) : (
         <>
-          <div className="space-y-3">
-            {students.map((student) => (
-              <div key={student.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-purple-50 text-purple-600 p-2.5 rounded-lg">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-800">
+          <p className="text-sm text-gray-500 mb-3">{filtered.length} student(s) found</p>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">#</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Username</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Class</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Student ID</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Email</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Phone</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Assigned Teachers</th>
+                    <th className="text-right px-4 py-3 font-semibold text-gray-600">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filtered.map((student, index) => (
+                    <tr key={student.id} className="hover:bg-gray-50 transition">
+                      <td className="px-4 py-3 text-gray-500">{index + 1}</td>
+                      <td className="px-4 py-3 font-medium text-gray-800">
                         {student.first_name} {student.last_name}
-                      </h3>
-                      <p className="text-sm text-gray-500">@{student.username}</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                        {student.grade && (
-                          <span className="inline-block text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
-                            Class {student.grade}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">@{student.username}</td>
+                      <td className="px-4 py-3">
+                        {student.grade ? (
+                          <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+                            {student.grade}{student.section || ''}
                           </span>
+                        ) : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500">{student.student_id || '-'}</td>
+                      <td className="px-4 py-3 text-gray-500">{student.email || '-'}</td>
+                      <td className="px-4 py-3 text-gray-500">{student.phone_number || '-'}</td>
+                      <td className="px-4 py-3">
+                        {student.assigned_teachers && student.assigned_teachers.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {student.assigned_teachers.map((at, idx) => (
+                              <span key={idx} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                                {at.teacher_name} - {at.subject_name}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">-</span>
                         )}
-                        {student.student_id && (
-                          <p className="text-xs text-gray-400">ID: {student.student_id}</p>
-                        )}
-                        {student.email && (
-                          <p className="text-xs text-gray-400">{student.email}</p>
-                        )}
-                        {student.phone_number && (
-                          <p className="text-xs text-gray-400">{student.phone_number}</p>
-                        )}
-                      </div>
-                      {/* Show assigned teachers */}
-                      {student.assigned_teachers && student.assigned_teachers.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {student.assigned_teachers.map((at, idx) => (
-                            <span key={idx} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
-                              {at.teacher_name} - {at.subject_name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDelete(student.id)}
-                    disabled={deleting === student.id}
-                    className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition disabled:opacity-50 self-start md:self-center"
-                  >
-                    {deleting === student.id ? 'Removing...' : 'Remove'}
-                  </button>
-                </div>
-              </div>
-            ))}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleDelete(student.id)}
+                          disabled={deleting === student.id}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                        >
+                          {deleting === student.id ? 'Removing...' : 'Remove'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* Pagination */}
@@ -434,7 +487,8 @@ export default function ManageStudents() {
             </button>
           </div>
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }

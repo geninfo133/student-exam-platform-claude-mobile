@@ -5,13 +5,15 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Avg, Min, Max
+from django.db.models.functions import TruncDay, TruncWeek, TruncMonth
 from django.utils import timezone
+from datetime import timedelta
 from django.contrib.auth import get_user_model
 
 from .models import (
     ExamType, Subject, Chapter, Question, UserExam, UserAnswer,
-    ExamPaper, AssignedExam, TeacherAssignment,
+    ExamPaper, AssignedExam, TeacherAssignment, HandwrittenExam,
 )
 from .serializers import (
     ExamTypeSerializer, SubjectSerializer, ChapterSerializer,
@@ -22,6 +24,7 @@ from .serializers import (
     StudentAssignedExamSerializer, TeacherReviewSerializer,
     UserAnswerReviewSerializer, CreatePaperFromPapersSerializer,
     TeacherAssignmentSerializer, TeacherAssignmentCreateSerializer,
+    HandwrittenExamSerializer, HandwrittenExamUploadSerializer,
 )
 from .paper_generator import generate_paper
 from .grading import grade_exam_async
@@ -183,6 +186,7 @@ def generate_exam(request):
 
     subject_id = serializer.validated_data['subject_id']
     chapter_id = serializer.validated_data.get('chapter_id')
+    assigned_exam_id = serializer.validated_data.get('assigned_exam_id')
 
     try:
         subject = Subject.objects.get(id=subject_id, is_active=True)
@@ -195,6 +199,25 @@ def generate_exam(request):
             chapter = Chapter.objects.get(id=chapter_id, subject=subject, is_active=True)
         except Chapter.DoesNotExist:
             return Response({'error': 'Chapter not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Link to assigned exam if provided
+    assigned_exam = None
+    if assigned_exam_id:
+        try:
+            assigned_exam = AssignedExam.objects.get(
+                id=assigned_exam_id, assigned_to=request.user, is_active=True,
+            )
+            # Check if student already has an attempt for this assigned exam
+            existing = UserExam.objects.filter(
+                user=request.user, assigned_exam=assigned_exam,
+            ).first()
+            if existing:
+                return Response({
+                    'exam_id': existing.id,
+                    'message': 'You already have an attempt for this exam',
+                }, status=status.HTTP_200_OK)
+        except AssignedExam.DoesNotExist:
+            return Response({'error': 'Assigned exam not found'}, status=status.HTTP_404_NOT_FOUND)
 
     # Get school context for question filtering
     school = request.user.get_school_account() if hasattr(request.user, 'get_school_account') else None
@@ -216,6 +239,7 @@ def generate_exam(request):
         subject=subject,
         chapter=chapter,
         school=school,
+        assigned_exam=assigned_exam,
         status='IN_PROGRESS',
         started_at=timezone.now(),
         total_questions=len(questions),
@@ -280,15 +304,10 @@ def submit_exam(request, exam_id):
 
     user_exam.status = 'COMPLETED'
     user_exam.completed_at = timezone.now()
-    user_exam.grading_status = 'GRADING_MCQ'
+    user_exam.grading_status = 'PENDING_REVIEW'
     user_exam.save()
 
-    # Start grading in background thread
-    thread = threading.Thread(target=grade_exam_async, args=(user_exam.id,))
-    thread.daemon = True
-    thread.start()
-
-    return Response({'message': 'Exam submitted, grading started', 'exam_id': user_exam.id})
+    return Response({'message': 'Exam submitted. Your teacher will review and grade it.', 'exam_id': user_exam.id})
 
 
 @api_view(['GET'])
@@ -328,6 +347,15 @@ def exam_result(request, exam_id):
     except UserExam.DoesNotExist:
         return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Students can only see results after teacher has graded
+    if user.role not in ('school', 'teacher') and user_exam.grading_status not in ('COMPLETED',):
+        return Response({
+            'id': user_exam.id,
+            'grading_status': user_exam.grading_status,
+            'subject_name': user_exam.subject.name if user_exam.subject else '',
+            'message': 'Your exam is pending teacher review. Results will be available after grading.',
+        })
+
     serializer = UserExamDetailSerializer(user_exam)
     return Response(serializer.data)
 
@@ -337,10 +365,14 @@ class ExamHistoryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return UserExam.objects.filter(
+        qs = UserExam.objects.filter(
             user=self.request.user,
             status='COMPLETED',
         ).select_related('subject__exam_type', 'chapter').order_by('-completed_at')
+        # Students only see fully graded exams
+        if self.request.user.role not in ('school', 'teacher'):
+            qs = qs.filter(grading_status='COMPLETED')
+        return qs
 
 
 # ============================================================
@@ -615,7 +647,7 @@ class TeacherAssignmentListView(generics.ListAPIView):
     def get_queryset(self):
         qs = TeacherAssignment.objects.filter(
             school=self.request.user,
-        ).select_related('teacher', 'subject').prefetch_related('students')
+        ).select_related('teacher', 'subject')
         teacher_id = self.request.query_params.get('teacher')
         if teacher_id:
             qs = qs.filter(teacher_id=teacher_id)
@@ -623,7 +655,7 @@ class TeacherAssignmentListView(generics.ListAPIView):
 
 
 class TeacherAssignmentCreateView(APIView):
-    """School creates/updates a teacher-subject-students mapping."""
+    """School creates a teacher-subject-class/section mapping."""
     permission_classes = [permissions.IsAuthenticated, IsSchoolUser]
 
     def post(self, request):
@@ -633,7 +665,8 @@ class TeacherAssignmentCreateView(APIView):
         school = request.user
         teacher_id = serializer.validated_data['teacher_id']
         subject_id = serializer.validated_data['subject_id']
-        student_ids = serializer.validated_data.get('student_ids', [])
+        grade = serializer.validated_data['grade']
+        section = serializer.validated_data['section']
 
         # Validate teacher belongs to school
         try:
@@ -647,19 +680,14 @@ class TeacherAssignmentCreateView(APIView):
         except Subject.DoesNotExist:
             return Response({'error': 'Subject not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Create or update assignment
+        # Create or get assignment
         assignment, created = TeacherAssignment.objects.get_or_create(
             school=school,
             teacher=teacher,
             subject=subject,
+            grade=grade,
+            section=section,
         )
-
-        # Set students (only those in the school)
-        if student_ids:
-            students = User.objects.filter(id__in=student_ids, school=school, role='student')
-            assignment.students.set(students)
-        else:
-            assignment.students.clear()
 
         data = TeacherAssignmentSerializer(assignment).data
         return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
@@ -679,14 +707,14 @@ class TeacherAssignmentDeleteView(APIView):
 
 
 class TeacherMyAssignmentsView(generics.ListAPIView):
-    """Teacher views their own subject+student assignments."""
+    """Teacher views their own subject+class/section assignments."""
     serializer_class = TeacherAssignmentSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacherUser]
 
     def get_queryset(self):
         return TeacherAssignment.objects.filter(
             teacher=self.request.user,
-        ).select_related('teacher', 'subject').prefetch_related('students')
+        ).select_related('teacher', 'subject')
 
 
 # ============================================================
@@ -708,10 +736,9 @@ class TeacherDashboardStatsView(APIView):
         pending_reviews = UserExam.objects.filter(
             school=school,
             status='COMPLETED',
-            grading_status='COMPLETED',
-        ).exclude(
-            answers__teacher_reviewed=True,
-        ).distinct().count()
+            grading_status='PENDING_REVIEW',
+        ).count()
+        handwritten_graded = HandwrittenExam.objects.filter(school=school, status='GRADED').count()
 
         # Recent exams by students
         recent_exams = UserExam.objects.filter(
@@ -723,6 +750,7 @@ class TeacherDashboardStatsView(APIView):
             'student': e.user.get_full_name() or e.user.username,
             'subject': e.subject.name,
             'score': e.score,
+            'total_marks': e.subject.total_marks if e.subject else 50,
             'percentage': e.percentage,
             'completed_at': e.completed_at,
         } for e in recent_exams]
@@ -732,6 +760,7 @@ class TeacherDashboardStatsView(APIView):
             'assigned_exams_count': assigned_count,
             'students_count': students_count,
             'pending_reviews': pending_reviews,
+            'handwritten_graded': handwritten_graded,
             'recent_exams': recent_data,
         })
 
@@ -765,4 +794,755 @@ class SchoolDashboardStatsView(APIView):
             'exams_count': exams_count,
             'papers_count': papers_count,
             'recent_activity': activity_data,
+        })
+
+
+# ============================================================
+# Handwritten Answer Sheet Grading
+# ============================================================
+
+class HandwrittenExamUploadView(generics.CreateAPIView):
+    """Upload a handwritten answer sheet + question paper for AI grading."""
+    serializer_class = HandwrittenExamUploadSerializer
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        school = user if user.role == 'school' else user.school
+        serializer.save(school=school, teacher=user)
+
+
+class HandwrittenExamProcessView(APIView):
+    """Start AI grading of a handwritten exam."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def post(self, request, pk):
+        user = request.user
+        school = user if user.role == 'school' else user.school
+        try:
+            exam = HandwrittenExam.objects.get(pk=pk, school=school)
+        except HandwrittenExam.DoesNotExist:
+            return Response({'error': 'Handwritten exam not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if exam.status == 'PROCESSING':
+            return Response({'error': 'Already processing'}, status=status.HTTP_400_BAD_REQUEST)
+
+        include_analysis = str(request.data.get('include_analysis', 'false')).lower() in ('true', '1', 'yes')
+
+        from .handwritten_processor import process_handwritten_exam
+        thread = threading.Thread(target=process_handwritten_exam, args=(exam.id, include_analysis))
+        thread.daemon = True
+        thread.start()
+
+        return Response({'message': 'Grading started', 'id': exam.id}, status=status.HTTP_202_ACCEPTED)
+
+
+class HandwrittenExamListView(generics.ListAPIView):
+    """List all handwritten exams for the teacher's school."""
+    serializer_class = HandwrittenExamSerializer
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def get_queryset(self):
+        user = self.request.user
+        school = user if user.role == 'school' else user.school
+        return HandwrittenExam.objects.filter(school=school).select_related('subject', 'teacher', 'student')
+
+
+class HandwrittenExamDetailView(generics.RetrieveAPIView):
+    """Get full detail including grading_data for a handwritten exam."""
+    serializer_class = HandwrittenExamSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'student':
+            return HandwrittenExam.objects.filter(student=user).select_related('subject', 'teacher', 'student')
+        school = user if user.role == 'school' else user.school
+        return HandwrittenExam.objects.filter(school=school).select_related('subject', 'teacher', 'student')
+
+
+class StudentHandwrittenListView(generics.ListAPIView):
+    """List handwritten exam results for the logged-in student."""
+    serializer_class = HandwrittenExamSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return HandwrittenExam.objects.filter(
+            student=self.request.user, status='GRADED',
+        ).select_related('subject', 'teacher', 'student').order_by('-created_at')
+
+
+class HandwrittenExamDeleteView(generics.DestroyAPIView):
+    """Delete a handwritten exam and its files."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def get_queryset(self):
+        user = self.request.user
+        school = user if user.role == 'school' else user.school
+        return HandwrittenExam.objects.filter(school=school)
+
+    def perform_destroy(self, instance):
+        # Delete associated files
+        if instance.answer_sheet:
+            instance.answer_sheet.delete(save=False)
+        if instance.question_paper:
+            instance.question_paper.delete(save=False)
+        instance.delete()
+
+
+# ============================================================
+# Generate Analysis on Demand
+# ============================================================
+
+class GenerateExamAnalysisView(APIView):
+    """Teacher triggers analysis for an already-graded online exam."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def post(self, request, exam_id):
+        user = request.user
+        school = user if user.role == 'school' else user.school
+        try:
+            user_exam = UserExam.objects.get(id=exam_id, school=school, status='COMPLETED')
+        except UserExam.DoesNotExist:
+            return Response({'error': 'Exam not found or not completed'}, status=status.HTTP_404_NOT_FOUND)
+
+        from .analysis import generate_analysis
+        try:
+            generate_analysis(user_exam)
+            return Response({'message': 'Analysis generated successfully'})
+        except Exception as e:
+            return Response({'error': f'Analysis failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class PendingReviewListView(APIView):
+    """List exams pending teacher review."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def get(self, request):
+        user = request.user
+        school = user if user.role == 'school' else user.school
+        exams = UserExam.objects.filter(
+            school=school,
+            status='COMPLETED',
+            grading_status__in=['PENDING_REVIEW', 'GRADING_MCQ', 'GRADING_DESCRIPTIVE', 'ANALYZING'],
+        ).select_related('user', 'subject').order_by('-completed_at')
+
+        data = [{
+            'id': e.id,
+            'student': e.user.get_full_name() or e.user.username,
+            'subject': e.subject.name if e.subject else 'N/A',
+            'total_questions': e.total_questions,
+            'completed_at': e.completed_at,
+            'grading_status': e.grading_status,
+        } for e in exams]
+
+        return Response(data)
+
+
+class TeacherGradeExamView(APIView):
+    """Teacher triggers grading for a student-submitted online exam."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def post(self, request, exam_id):
+        user = request.user
+        school = user if user.role == 'school' else user.school
+        include_analysis = str(request.data.get('include_analysis', 'false')).lower() in ('true', '1', 'yes')
+
+        try:
+            user_exam = UserExam.objects.get(id=exam_id, school=school, status='COMPLETED')
+        except UserExam.DoesNotExist:
+            return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if user_exam.grading_status not in ('PENDING_REVIEW', 'FAILED'):
+            return Response({'error': 'Exam is not pending review'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_exam.grading_status = 'GRADING_MCQ'
+        user_exam.save()
+
+        thread = threading.Thread(
+            target=grade_exam_async, args=(user_exam.id, include_analysis)
+        )
+        thread.daemon = True
+        thread.start()
+
+        return Response({'message': 'Grading started', 'exam_id': user_exam.id})
+
+
+# ============================================================
+# Teacher Analytics
+# ============================================================
+
+class TeacherAnalyticsView(APIView):
+    """Unified analytics across online exams (UserExam) and handwritten exams."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def get(self, request):
+        user = request.user
+        school = user if user.role == 'school' else user.school
+
+        period = int(request.query_params.get('period', 30))
+        subject_id = request.query_params.get('subject_id')
+
+        # Cutoff date
+        if period > 0:
+            cutoff = timezone.now() - timedelta(days=period)
+        else:
+            cutoff = None
+
+        # --- Base querysets ---
+        online_qs = UserExam.objects.filter(
+            school=school,
+            status='COMPLETED',
+            grading_status='COMPLETED',
+        )
+        handwritten_qs = HandwrittenExam.objects.filter(
+            school=school,
+            status='GRADED',
+        )
+
+        if cutoff:
+            online_qs = online_qs.filter(completed_at__gte=cutoff)
+            handwritten_qs = handwritten_qs.filter(created_at__gte=cutoff)
+
+        if subject_id:
+            online_qs = online_qs.filter(subject_id=subject_id)
+            handwritten_qs = handwritten_qs.filter(subject_id=subject_id)
+
+        # --- Overview ---
+        online_count = online_qs.count()
+        handwritten_count = handwritten_qs.count()
+        total_exams = online_count + handwritten_count
+
+        online_students = set(online_qs.values_list('user_id', flat=True))
+        hw_students = set(handwritten_qs.exclude(student__isnull=True).values_list('student_id', flat=True))
+        total_students = len(online_students | hw_students)
+
+        online_avg = online_qs.aggregate(avg=Avg('percentage'))['avg'] or 0
+        hw_avg = handwritten_qs.aggregate(avg=Avg('percentage'))['avg'] or 0
+        if total_exams > 0:
+            average_percentage = round(
+                (online_avg * online_count + hw_avg * handwritten_count) / total_exams, 1
+            )
+        else:
+            average_percentage = 0
+
+        pass_threshold = 40
+        online_pass = online_qs.filter(percentage__gte=pass_threshold).count()
+        online_fail = online_count - online_pass
+        hw_pass = handwritten_qs.filter(percentage__gte=pass_threshold).count()
+        hw_fail = handwritten_count - hw_pass
+        pass_count = online_pass + hw_pass
+        fail_count = online_fail + hw_fail
+        pass_rate = round(pass_count / total_exams * 100, 1) if total_exams > 0 else 0
+
+        overview = {
+            'total_exams': total_exams,
+            'total_students': total_students,
+            'online_exams': online_count,
+            'handwritten_exams': handwritten_count,
+            'average_percentage': average_percentage,
+            'pass_count': pass_count,
+            'fail_count': fail_count,
+            'pass_rate': pass_rate,
+        }
+
+        # --- Trends ---
+        if period <= 14:
+            trunc_fn = TruncDay
+        elif period <= 90:
+            trunc_fn = TruncWeek
+        else:
+            trunc_fn = TruncMonth
+
+        online_trends = (
+            online_qs.annotate(period=trunc_fn('completed_at'))
+            .values('period')
+            .annotate(avg=Avg('percentage'), count=Count('id'))
+            .order_by('period')
+        )
+        hw_trends = (
+            handwritten_qs.annotate(period=trunc_fn('created_at'))
+            .values('period')
+            .annotate(avg=Avg('percentage'), count=Count('id'))
+            .order_by('period')
+        )
+
+        # Merge trends by period
+        trend_map = {}
+        for t in online_trends:
+            key = t['period'].isoformat() if t['period'] else 'unknown'
+            trend_map[key] = {
+                'period': key,
+                'online_avg': round(t['avg'] or 0, 1),
+                'handwritten_avg': 0,
+                'exam_count': t['count'],
+            }
+        for t in hw_trends:
+            key = t['period'].isoformat() if t['period'] else 'unknown'
+            if key in trend_map:
+                trend_map[key]['handwritten_avg'] = round(t['avg'] or 0, 1)
+                trend_map[key]['exam_count'] += t['count']
+            else:
+                trend_map[key] = {
+                    'period': key,
+                    'online_avg': 0,
+                    'handwritten_avg': round(t['avg'] or 0, 1),
+                    'exam_count': t['count'],
+                }
+        for entry in trend_map.values():
+            vals = []
+            if entry['online_avg']:
+                vals.append(entry['online_avg'])
+            if entry['handwritten_avg']:
+                vals.append(entry['handwritten_avg'])
+            entry['combined_avg'] = round(sum(vals) / len(vals), 1) if vals else 0
+
+        trends = sorted(trend_map.values(), key=lambda x: x['period'])
+
+        # --- Subject breakdown ---
+        subject_online = (
+            online_qs.values('subject__name', 'subject_id')
+            .annotate(
+                count=Count('id'),
+                avg=Avg('percentage'),
+                highest=Max('percentage'),
+                lowest=Min('percentage'),
+            )
+        )
+        subject_hw = (
+            handwritten_qs.values('subject__name', 'subject_id')
+            .annotate(
+                count=Count('id'),
+                avg=Avg('percentage'),
+                highest=Max('percentage'),
+                lowest=Min('percentage'),
+            )
+        )
+
+        subj_map = {}
+        for s in subject_online:
+            name = s['subject__name']
+            subj_map[name] = {
+                'subject_name': name,
+                'online_count': s['count'],
+                'handwritten_count': 0,
+                'total_exams': s['count'],
+                'average_percentage': round(s['avg'] or 0, 1),
+                'highest_score': round(s['highest'] or 0, 1),
+                'lowest_score': round(s['lowest'] or 0, 1),
+                '_online_avg': s['avg'] or 0,
+                '_online_count': s['count'],
+            }
+            # Pass rate per subject
+            passed = online_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+            subj_map[name]['pass_rate'] = round(passed / s['count'] * 100, 1) if s['count'] > 0 else 0
+
+        for s in subject_hw:
+            name = s['subject__name']
+            if name in subj_map:
+                entry = subj_map[name]
+                entry['handwritten_count'] = s['count']
+                entry['total_exams'] += s['count']
+                entry['highest_score'] = max(entry['highest_score'], round(s['highest'] or 0, 1))
+                entry['lowest_score'] = min(entry['lowest_score'], round(s['lowest'] or 0, 1))
+                # Recalculate weighted avg
+                total = entry['_online_count'] + s['count']
+                entry['average_percentage'] = round(
+                    (entry['_online_avg'] * entry['_online_count'] + (s['avg'] or 0) * s['count']) / total, 1
+                ) if total > 0 else 0
+                # Recalculate pass rate
+                hw_passed = handwritten_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+                online_passed = online_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+                entry['pass_rate'] = round((online_passed + hw_passed) / total * 100, 1) if total > 0 else 0
+            else:
+                hw_passed = handwritten_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+                subj_map[name] = {
+                    'subject_name': name,
+                    'online_count': 0,
+                    'handwritten_count': s['count'],
+                    'total_exams': s['count'],
+                    'average_percentage': round(s['avg'] or 0, 1),
+                    'highest_score': round(s['highest'] or 0, 1),
+                    'lowest_score': round(s['lowest'] or 0, 1),
+                    'pass_rate': round(hw_passed / s['count'] * 100, 1) if s['count'] > 0 else 0,
+                }
+
+        # Remove internal keys
+        subject_breakdown = []
+        for entry in subj_map.values():
+            entry.pop('_online_avg', None)
+            entry.pop('_online_count', None)
+            subject_breakdown.append(entry)
+
+        # --- Student rankings (online only – handwritten may not have student FK) ---
+        student_stats = (
+            online_qs.values('user_id', 'user__first_name', 'user__last_name', 'user__username')
+            .annotate(
+                total_exams=Count('id'),
+                average_percentage=Avg('percentage'),
+                highest_percentage=Max('percentage'),
+            )
+            .order_by('-average_percentage')[:20]
+        )
+
+        student_rankings = []
+        for rank, s in enumerate(student_stats, 1):
+            name = f"{s['user__first_name']} {s['user__last_name']}".strip() or s['user__username']
+            # Determine trend from last 2 exams
+            last_two = list(
+                online_qs.filter(user_id=s['user_id'])
+                .order_by('-completed_at')
+                .values_list('percentage', flat=True)[:2]
+            )
+            if len(last_two) >= 2:
+                if last_two[0] > last_two[1] + 2:
+                    trend = 'up'
+                elif last_two[0] < last_two[1] - 2:
+                    trend = 'down'
+                else:
+                    trend = 'stable'
+            else:
+                trend = 'stable'
+
+            student_rankings.append({
+                'rank': rank,
+                'student_name': name,
+                'total_exams': s['total_exams'],
+                'average_percentage': round(s['average_percentage'] or 0, 1),
+                'highest_percentage': round(s['highest_percentage'] or 0, 1),
+                'latest_trend': trend,
+            })
+
+        # --- Exam type comparison ---
+        online_type_stats = online_qs.aggregate(
+            avg=Avg('percentage'),
+            mcq_avg=Avg('mcq_score'),
+            short_avg=Avg('short_answer_score'),
+            long_avg=Avg('long_answer_score'),
+        )
+        exam_type_comparison = {
+            'online': {
+                'count': online_count,
+                'average_percentage': round(online_type_stats['avg'] or 0, 1),
+                'mcq_avg': round(online_type_stats['mcq_avg'] or 0, 1),
+                'short_avg': round(online_type_stats['short_avg'] or 0, 1),
+                'long_avg': round(online_type_stats['long_avg'] or 0, 1),
+            },
+            'handwritten': {
+                'count': handwritten_count,
+                'average_percentage': round(hw_avg, 1),
+            },
+        }
+
+        # --- Recent performance (last 10 across both types) ---
+        recent_online = list(
+            online_qs.select_related('user', 'subject')
+            .order_by('-completed_at')[:10]
+        )
+        recent_hw = list(
+            handwritten_qs.select_related('student', 'subject')
+            .order_by('-created_at')[:10]
+        )
+
+        combined = []
+        for e in recent_online:
+            combined.append({
+                'type': 'online',
+                'student': e.user.get_full_name() or e.user.username,
+                'subject': e.subject.name if e.subject else 'N/A',
+                'score': e.score,
+                'percentage': e.percentage,
+                'date': e.completed_at,
+            })
+        for e in recent_hw:
+            combined.append({
+                'type': 'handwritten',
+                'student': (e.student.get_full_name() if e.student else e.student_name) or 'Unknown',
+                'subject': e.subject.name if e.subject else 'N/A',
+                'score': e.obtained_marks,
+                'percentage': e.percentage,
+                'date': e.created_at,
+            })
+        combined.sort(key=lambda x: x['date'] or timezone.now(), reverse=True)
+        recent_performance = combined[:10]
+
+        # --- Subjects list for filter dropdown ---
+        subjects = list(
+            Subject.objects.filter(is_active=True).values('id', 'name').order_by('name')
+        )
+
+        return Response({
+            'overview': overview,
+            'trends': trends,
+            'subject_breakdown': subject_breakdown,
+            'student_rankings': student_rankings,
+            'exam_type_comparison': exam_type_comparison,
+            'recent_performance': recent_performance,
+            'subjects': subjects,
+        })
+
+
+# ============================================================
+# Student Analytics
+# ============================================================
+
+class StudentAnalyticsView(APIView):
+    """Analytics for a student's own exam performance."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        period = int(request.query_params.get('period', 30))
+        subject_id = request.query_params.get('subject_id')
+
+        if period > 0:
+            cutoff = timezone.now() - timedelta(days=period)
+        else:
+            cutoff = None
+
+        # --- Base querysets (student's own data) ---
+        online_qs = UserExam.objects.filter(
+            user=user,
+            status='COMPLETED',
+            grading_status='COMPLETED',
+        )
+        handwritten_qs = HandwrittenExam.objects.filter(
+            student=user,
+            status='GRADED',
+        )
+
+        if cutoff:
+            online_qs = online_qs.filter(completed_at__gte=cutoff)
+            handwritten_qs = handwritten_qs.filter(created_at__gte=cutoff)
+
+        if subject_id:
+            online_qs = online_qs.filter(subject_id=subject_id)
+            handwritten_qs = handwritten_qs.filter(subject_id=subject_id)
+
+        # --- Overview ---
+        online_count = online_qs.count()
+        handwritten_count = handwritten_qs.count()
+        total_exams = online_count + handwritten_count
+
+        online_agg = online_qs.aggregate(
+            avg=Avg('percentage'), best=Max('percentage'), lowest=Min('percentage'),
+        )
+        hw_agg = handwritten_qs.aggregate(
+            avg=Avg('percentage'), best=Max('percentage'), lowest=Min('percentage'),
+        )
+
+        online_avg = online_agg['avg'] or 0
+        hw_avg = hw_agg['avg'] or 0
+        if total_exams > 0:
+            average_percentage = round(
+                (online_avg * online_count + hw_avg * handwritten_count) / total_exams, 1
+            )
+        else:
+            average_percentage = 0
+
+        best_scores = [v for v in [online_agg['best'], hw_agg['best']] if v is not None]
+        best_score = round(max(best_scores), 1) if best_scores else 0
+
+        pass_threshold = 40
+        online_pass = online_qs.filter(percentage__gte=pass_threshold).count()
+        hw_pass = handwritten_qs.filter(percentage__gte=pass_threshold).count()
+        pass_count = online_pass + hw_pass
+        fail_count = total_exams - pass_count
+        pass_rate = round(pass_count / total_exams * 100, 1) if total_exams > 0 else 0
+
+        overview = {
+            'total_exams': total_exams,
+            'online_exams': online_count,
+            'handwritten_exams': handwritten_count,
+            'average_percentage': average_percentage,
+            'best_score': best_score,
+            'pass_count': pass_count,
+            'fail_count': fail_count,
+            'pass_rate': pass_rate,
+        }
+
+        # --- Trends ---
+        if period <= 14:
+            trunc_fn = TruncDay
+        elif period <= 90:
+            trunc_fn = TruncWeek
+        else:
+            trunc_fn = TruncMonth
+
+        online_trends = (
+            online_qs.annotate(period=trunc_fn('completed_at'))
+            .values('period')
+            .annotate(avg=Avg('percentage'), count=Count('id'))
+            .order_by('period')
+        )
+        hw_trends = (
+            handwritten_qs.annotate(period=trunc_fn('created_at'))
+            .values('period')
+            .annotate(avg=Avg('percentage'), count=Count('id'))
+            .order_by('period')
+        )
+
+        trend_map = {}
+        for t in online_trends:
+            key = t['period'].isoformat() if t['period'] else 'unknown'
+            trend_map[key] = {
+                'period': key,
+                'online_avg': round(t['avg'] or 0, 1),
+                'handwritten_avg': 0,
+                'exam_count': t['count'],
+            }
+        for t in hw_trends:
+            key = t['period'].isoformat() if t['period'] else 'unknown'
+            if key in trend_map:
+                trend_map[key]['handwritten_avg'] = round(t['avg'] or 0, 1)
+                trend_map[key]['exam_count'] += t['count']
+            else:
+                trend_map[key] = {
+                    'period': key,
+                    'online_avg': 0,
+                    'handwritten_avg': round(t['avg'] or 0, 1),
+                    'exam_count': t['count'],
+                }
+        for entry in trend_map.values():
+            vals = []
+            if entry['online_avg']:
+                vals.append(entry['online_avg'])
+            if entry['handwritten_avg']:
+                vals.append(entry['handwritten_avg'])
+            entry['combined_avg'] = round(sum(vals) / len(vals), 1) if vals else 0
+
+        trends = sorted(trend_map.values(), key=lambda x: x['period'])
+
+        # --- Subject breakdown ---
+        subject_online = (
+            online_qs.values('subject__name', 'subject_id')
+            .annotate(
+                count=Count('id'), avg=Avg('percentage'),
+                highest=Max('percentage'), lowest=Min('percentage'),
+            )
+        )
+        subject_hw = (
+            handwritten_qs.values('subject__name', 'subject_id')
+            .annotate(
+                count=Count('id'), avg=Avg('percentage'),
+                highest=Max('percentage'), lowest=Min('percentage'),
+            )
+        )
+
+        subj_map = {}
+        for s in subject_online:
+            name = s['subject__name']
+            passed = online_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+            subj_map[name] = {
+                'subject_name': name,
+                'online_count': s['count'],
+                'handwritten_count': 0,
+                'total_exams': s['count'],
+                'average_percentage': round(s['avg'] or 0, 1),
+                'highest_score': round(s['highest'] or 0, 1),
+                'lowest_score': round(s['lowest'] or 0, 1),
+                'pass_rate': round(passed / s['count'] * 100, 1) if s['count'] > 0 else 0,
+                '_online_avg': s['avg'] or 0,
+                '_online_count': s['count'],
+            }
+        for s in subject_hw:
+            name = s['subject__name']
+            if name in subj_map:
+                entry = subj_map[name]
+                entry['handwritten_count'] = s['count']
+                entry['total_exams'] += s['count']
+                entry['highest_score'] = max(entry['highest_score'], round(s['highest'] or 0, 1))
+                entry['lowest_score'] = min(entry['lowest_score'], round(s['lowest'] or 0, 1))
+                total = entry['_online_count'] + s['count']
+                entry['average_percentage'] = round(
+                    (entry['_online_avg'] * entry['_online_count'] + (s['avg'] or 0) * s['count']) / total, 1
+                ) if total > 0 else 0
+                hw_passed = handwritten_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+                online_passed = online_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+                entry['pass_rate'] = round((online_passed + hw_passed) / total * 100, 1) if total > 0 else 0
+            else:
+                hw_passed = handwritten_qs.filter(subject__name=name, percentage__gte=pass_threshold).count()
+                subj_map[name] = {
+                    'subject_name': name,
+                    'online_count': 0,
+                    'handwritten_count': s['count'],
+                    'total_exams': s['count'],
+                    'average_percentage': round(s['avg'] or 0, 1),
+                    'highest_score': round(s['highest'] or 0, 1),
+                    'lowest_score': round(s['lowest'] or 0, 1),
+                    'pass_rate': round(hw_passed / s['count'] * 100, 1) if s['count'] > 0 else 0,
+                }
+
+        subject_breakdown = []
+        for entry in subj_map.values():
+            entry.pop('_online_avg', None)
+            entry.pop('_online_count', None)
+            subject_breakdown.append(entry)
+
+        # --- Question type analysis (online exams only) ---
+        type_stats = online_qs.aggregate(
+            mcq_avg=Avg('mcq_score'),
+            short_avg=Avg('short_answer_score'),
+            long_avg=Avg('long_answer_score'),
+            avg_correct=Avg('correct_answers'),
+            avg_wrong=Avg('wrong_answers'),
+            avg_unanswered=Avg('unanswered'),
+        )
+        question_type_analysis = {
+            'mcq_avg': round(type_stats['mcq_avg'] or 0, 1),
+            'short_avg': round(type_stats['short_avg'] or 0, 1),
+            'long_avg': round(type_stats['long_avg'] or 0, 1),
+            'avg_correct': round(type_stats['avg_correct'] or 0, 1),
+            'avg_wrong': round(type_stats['avg_wrong'] or 0, 1),
+            'avg_unanswered': round(type_stats['avg_unanswered'] or 0, 1),
+        }
+
+        # --- Recent exams (last 10 across both types) ---
+        recent_online = list(
+            online_qs.select_related('subject')
+            .order_by('-completed_at')[:10]
+        )
+        recent_hw = list(
+            handwritten_qs.select_related('subject')
+            .order_by('-created_at')[:10]
+        )
+
+        combined = []
+        for e in recent_online:
+            combined.append({
+                'id': e.id,
+                'type': 'online',
+                'subject': e.subject.name if e.subject else 'N/A',
+                'score': e.score,
+                'percentage': e.percentage,
+                'mcq_score': e.mcq_score,
+                'short_answer_score': e.short_answer_score,
+                'long_answer_score': e.long_answer_score,
+                'date': e.completed_at,
+            })
+        for e in recent_hw:
+            combined.append({
+                'id': e.id,
+                'type': 'handwritten',
+                'subject': e.subject.name if e.subject else 'N/A',
+                'score': e.obtained_marks,
+                'percentage': e.percentage,
+                'date': e.created_at,
+            })
+        combined.sort(key=lambda x: x['date'] or timezone.now(), reverse=True)
+        recent_exams = combined[:10]
+
+        # --- Subjects list for filter ---
+        subjects = list(
+            Subject.objects.filter(is_active=True).values('id', 'name').order_by('name')
+        )
+
+        return Response({
+            'overview': overview,
+            'trends': trends,
+            'subject_breakdown': subject_breakdown,
+            'question_type_analysis': question_type_analysis,
+            'recent_exams': recent_exams,
+            'subjects': subjects,
         })

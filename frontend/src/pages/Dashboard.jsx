@@ -8,21 +8,24 @@ export default function Dashboard() {
   const [examTypes, setExamTypes] = useState([]);
   const [recentExams, setRecentExams] = useState([]);
   const [assignedExams, setAssignedExams] = useState([]);
+  const [handwrittenResults, setHandwrittenResults] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [typesRes, historyRes, assignedRes] = await Promise.all([
+        const [typesRes, historyRes, assignedRes, hwRes] = await Promise.all([
           api.get('/api/exam-types/'),
           api.get('/api/exams/history/'),
           api.get('/api/exams/assigned/my/').catch(() => ({ data: [] })),
+          api.get('/api/handwritten/my/').catch(() => ({ data: [] })),
         ]);
         setExamTypes(typesRes.data.results || typesRes.data);
         const hist = historyRes.data.results || historyRes.data;
         setRecentExams(hist.slice(0, 5));
         const assigned = assignedRes.data.results || assignedRes.data;
         setAssignedExams(assigned.filter(e => !e.my_attempt || e.my_attempt.status !== 'COMPLETED').slice(0, 5));
+        setHandwrittenResults(hwRes.data.results || hwRes.data);
       } catch (err) {
         console.error(err);
       } finally {
@@ -44,12 +47,23 @@ export default function Dashboard() {
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Welcome */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold">
-          Welcome, {user?.first_name || user?.username}!
-        </h1>
-        <p className="mt-2 text-indigo-100">
-          {user?.board} - Class {user?.grade} | {user?.school_account_name || user?.school_name || 'Student'}
-        </p>
+        <div className="flex items-center gap-4">
+          {user?.profile_photo ? (
+            <img src={user.profile_photo} alt="Profile" className="w-16 h-16 rounded-full object-cover border-2 border-white/50 shrink-0" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold shrink-0">
+              {(user?.first_name?.[0] || user?.username?.[0] || '?').toUpperCase()}
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold">
+              Welcome, {user?.first_name || user?.username}!
+            </h1>
+            <p className="mt-1 text-gray-300">
+              {user?.board} - Class {user?.grade} | {user?.school_account_name || user?.school_name || 'Student'}
+            </p>
+          </div>
+        </div>
         <Link to="/subjects" className="inline-block mt-4 bg-white text-indigo-700 px-6 py-2.5 rounded-lg font-medium hover:bg-indigo-50 transition">
           Start New Exam
         </Link>
@@ -139,6 +153,36 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Handwritten Exam Results */}
+      {handwrittenResults.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold mb-4 text-gray-800">Handwritten Exam Results</h2>
+          <div className="space-y-3">
+            {handwrittenResults.map((hw) => (
+              <div key={hw.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-semibold text-gray-800">{hw.title}</h3>
+                    <p className="text-sm text-gray-500">
+                      {hw.subject_name} | {new Date(hw.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-2xl font-bold ${
+                      hw.percentage >= 60 ? 'text-green-600' :
+                      hw.percentage >= 40 ? 'text-yellow-600' : 'text-red-600'
+                    }`}>
+                      {Math.round(hw.percentage)}%
+                    </p>
+                    <p className="text-xs text-gray-500">{hw.obtained_marks}/{hw.total_marks}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

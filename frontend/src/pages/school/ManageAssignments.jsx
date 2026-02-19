@@ -8,11 +8,36 @@ export default function ManageAssignments() {
   const [students, setStudents] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [message, setMessage] = useState({ text: '', type: '' });
-  const [form, setForm] = useState({ teacher_id: '', subject_id: '', student_ids: [] });
+
+  // Form state
+  const [selectedTeacher, setSelectedTeacher] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('');
+  const [selectedSection, setSelectedSection] = useState('');
+  const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
+
+  const fetchAll = async () => {
+    setLoading(true);
+    try {
+      const [aRes, tRes, sRes, subRes] = await Promise.all([
+        api.get('/api/assignments/'),
+        api.get('/api/auth/members/', { params: { role: 'teacher' } }),
+        api.get('/api/auth/members/', { params: { role: 'student' } }),
+        api.get('/api/subjects/'),
+      ]);
+      setAssignments(aRes.data.results || aRes.data);
+      setTeachers(tRes.data.results || tRes.data);
+      setStudents(sRes.data.results || sRes.data);
+      setSubjects(subRes.data.results || subRes.data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchAssignments = async () => {
     try {
@@ -23,29 +48,19 @@ export default function ManageAssignments() {
     }
   };
 
-  const fetchOptions = async () => {
-    try {
-      const [tRes, sRes, subRes] = await Promise.all([
-        api.get('/api/auth/members/', { params: { role: 'teacher' } }),
-        api.get('/api/auth/members/', { params: { role: 'student' } }),
-        api.get('/api/subjects/'),
-      ]);
-      setTeachers(tRes.data.results || tRes.data);
-      setStudents(sRes.data.results || sRes.data);
-      setSubjects(subRes.data.results || subRes.data);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  useEffect(() => { fetchAll(); }, []);
 
+  // Auto-select students when grade+section change
   useEffect(() => {
-    const init = async () => {
-      setLoading(true);
-      await Promise.all([fetchAssignments(), fetchOptions()]);
-      setLoading(false);
-    };
-    init();
-  }, []);
+    if (selectedGrade && selectedSection) {
+      const matching = students.filter(
+        (s) => s.grade === selectedGrade && s.section === selectedSection
+      );
+      setSelectedStudentIds(new Set(matching.map((s) => s.id)));
+    } else {
+      setSelectedStudentIds(new Set());
+    }
+  }, [selectedGrade, selectedSection, students]);
 
   const showMsg = (text, type = 'success') => {
     setMessage({ text, type });
@@ -53,37 +68,62 @@ export default function ManageAssignments() {
   };
 
   const toggleStudent = (id) => {
-    setForm((prev) => {
-      const ids = prev.student_ids.includes(id)
-        ? prev.student_ids.filter((sid) => sid !== id)
-        : [...prev.student_ids, id];
-      return { ...prev, student_ids: ids };
+    setSelectedStudentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
-  const toggleAllStudents = () => {
-    setForm((prev) => {
-      if (prev.student_ids.length === students.length) return { ...prev, student_ids: [] };
-      return { ...prev, student_ids: students.map((s) => s.id) };
-    });
+  const matchingStudents = students.filter(
+    (s) => selectedGrade && selectedSection && s.grade === selectedGrade && s.section === selectedSection
+  );
+
+  const allSelected = matchingStudents.length > 0 && matchingStudents.every((s) => selectedStudentIds.has(s.id));
+
+  const toggleAll = () => {
+    if (allSelected) setSelectedStudentIds(new Set());
+    else setSelectedStudentIds(new Set(matchingStudents.map((s) => s.id)));
   };
 
-  const handleCreate = async (e) => {
-    e.preventDefault();
-    if (!form.teacher_id || !form.subject_id) {
-      showMsg('Please select a teacher and subject.', 'error');
+  const resetForm = () => {
+    setSelectedTeacher('');
+    setSelectedSubject('');
+    setSelectedGrade('');
+    setSelectedSection('');
+    setSelectedStudentIds(new Set());
+  };
+
+  const selectTeacher = (tid) => {
+    const id = String(tid);
+    setSelectedTeacher(id);
+    const t = teachers.find((t) => String(t.id) === id);
+    if (t) {
+      setSelectedGrade(t.grade || '');
+      setSelectedSection(t.section || '');
+    }
+  };
+
+  const handleAssign = async () => {
+    if (!selectedTeacher || !selectedSubject || !selectedGrade || !selectedSection) {
+      showMsg('Please select a teacher, subject, class and section.', 'error');
+      return;
+    }
+    if (selectedStudentIds.size === 0) {
+      showMsg('Please select at least one student.', 'error');
       return;
     }
     setSubmitting(true);
     try {
       await api.post('/api/assignments/create/', {
-        teacher_id: parseInt(form.teacher_id, 10),
-        subject_id: parseInt(form.subject_id, 10),
-        student_ids: form.student_ids,
+        teacher_id: parseInt(selectedTeacher, 10),
+        subject_id: parseInt(selectedSubject, 10),
+        grade: selectedGrade,
+        section: selectedSection,
       });
-      showMsg('Assignment created successfully!');
-      setForm({ teacher_id: '', subject_id: '', student_ids: [] });
-      setShowForm(false);
+      showMsg(`Assignment created! ${selectedStudentIds.size} student(s) mapped.`);
+      resetForm();
       fetchAssignments();
     } catch (err) {
       const detail = err.response?.data;
@@ -101,14 +141,14 @@ export default function ManageAssignments() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Remove this teacher assignment?')) return;
+    if (!window.confirm('Remove this assignment?')) return;
     setDeleting(id);
     try {
       await api.delete(`/api/assignments/${id}/`);
       showMsg('Assignment removed.');
       fetchAssignments();
     } catch {
-      showMsg('Failed to remove assignment.', 'error');
+      showMsg('Failed to remove.', 'error');
     } finally {
       setDeleting(null);
     }
@@ -123,7 +163,7 @@ export default function ManageAssignments() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
+    <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
         <div className="flex items-center gap-3 mb-2">
@@ -134,193 +174,225 @@ export default function ManageAssignments() {
           </Link>
           <h1 className="text-2xl md:text-3xl font-bold">Teacher Assignments</h1>
         </div>
-        <p className="text-indigo-100">Assign teachers to subjects and map students to each teacher-subject pair.</p>
+        <p className="text-indigo-100">Select a teacher, then pick subject and class to assign.</p>
       </div>
 
       {/* Message */}
       {message.text && (
-        <div className={`px-4 py-3 rounded-lg mb-6 text-sm ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+        <div className={`px-4 py-3 rounded-lg mb-6 text-sm font-medium ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
           {message.text}
         </div>
       )}
 
-      {/* Actions Bar */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-gray-800">Assignments ({assignments.length})</h2>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center gap-2"
-        >
-          {showForm ? (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Cancel
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              New Assignment
-            </>
-          )}
-        </button>
-      </div>
+      {/* ── Two-column: Teachers list | Students list ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
 
-      {/* Create Form */}
-      {showForm && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Create Teacher Assignment</h3>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Teacher *</label>
-                <select
-                  value={form.teacher_id}
-                  onChange={(e) => setForm({ ...form, teacher_id: e.target.value })}
-                  required
-                  className="w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+        {/* LEFT: Teachers List */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-800">Teachers ({teachers.length})</h2>
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {teachers.length === 0 ? (
+              <div className="px-5 py-8 text-center text-gray-400 text-sm">No teachers found.</div>
+            ) : (
+              teachers.map((t) => (
+                <div
+                  key={t.id}
+                  onClick={() => selectTeacher(t.id)}
+                  className={`px-5 py-3 flex items-center justify-between cursor-pointer border-b border-gray-50 transition ${
+                    String(t.id) === selectedTeacher
+                      ? 'bg-indigo-50 border-l-4 border-l-indigo-500'
+                      : 'hover:bg-gray-50'
+                  }`}
                 >
-                  <option value="">Select Teacher</option>
-                  {teachers.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.first_name} {t.last_name} (@{t.username})
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
-                <select
-                  value={form.subject_id}
-                  onChange={(e) => setForm({ ...form, subject_id: e.target.value })}
-                  required
-                  className="w-full px-3 py-2.5 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-                >
-                  <option value="">Select Subject</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Students multi-select */}
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <label className="block text-sm font-medium text-gray-700">Assign Students</label>
-                {students.length > 0 && (
-                  <button type="button" onClick={toggleAllStudents} className="text-xs text-indigo-600 font-medium hover:underline">
-                    {form.student_ids.length === students.length ? 'Deselect All' : 'Select All'}
-                  </button>
-                )}
-              </div>
-              {students.length === 0 ? (
-                <p className="text-sm text-gray-400">No students found. Create student accounts first.</p>
-              ) : (
-                <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                  {students.map((stu) => (
-                    <label key={stu.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-2 py-1 rounded">
-                      <input
-                        type="checkbox"
-                        checked={form.student_ids.includes(stu.id)}
-                        onChange={() => toggleStudent(stu.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-gray-700">
-                        {stu.first_name} {stu.last_name}
-                      </span>
-                      <span className="text-xs text-gray-400">@{stu.username}</span>
-                      {stu.grade && <span className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">Grade {stu.grade}</span>}
-                    </label>
-                  ))}
+                  <div>
+                    <p className="font-medium text-gray-800 text-sm">{t.first_name} {t.last_name}</p>
+                    <p className="text-xs text-gray-400">
+                      Class {t.grade}{t.section} &middot; @{t.username}
+                    </p>
+                  </div>
+                  {String(t.id) === selectedTeacher && (
+                    <svg className="w-5 h-5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
                 </div>
-              )}
-              {form.student_ids.length > 0 && (
-                <p className="text-xs text-gray-500 mt-1">{form.student_ids.length} student(s) selected</p>
-              )}
-            </div>
+              ))
+            )}
+          </div>
+        </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
-              >
-                {submitting ? 'Creating...' : 'Create Assignment'}
-              </button>
+        {/* RIGHT: Students List */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-800">
+              Students
+              {selectedGrade && selectedSection && (
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  Class {selectedGrade}{selectedSection} ({matchingStudents.length})
+                </span>
+              )}
+            </h2>
+            {matchingStudents.length > 0 && (
               <button
                 type="button"
-                onClick={() => { setShowForm(false); setForm({ teacher_id: '', subject_id: '', student_ids: [] }); }}
-                className="bg-gray-200 text-gray-700 px-6 py-2.5 rounded-lg font-medium hover:bg-gray-300 transition"
+                onClick={toggleAll}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
               >
-                Cancel
+                {allSelected ? 'Deselect All' : 'Select All'} ({selectedStudentIds.size})
               </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Assignments List */}
-      {assignments.length === 0 ? (
-        <div className="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-100">
-          <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-          <p className="text-gray-500 mb-2">No teacher assignments yet.</p>
-          <button onClick={() => setShowForm(true)} className="text-indigo-600 font-medium hover:underline">
-            Create your first assignment
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {assignments.map((a) => (
-            <div key={a.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition">
-              <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="bg-indigo-50 text-indigo-600 p-2 rounded-lg">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-800">{a.teacher_name}</h3>
-                      <p className="text-sm text-indigo-600 font-medium">{a.subject_name}</p>
-                    </div>
-                  </div>
-
-                  {/* Students list */}
-                  <div className="mt-3">
-                    <p className="text-xs font-medium text-gray-500 mb-1">{a.student_count} Student(s)</p>
-                    {a.students_detail && a.students_detail.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {a.students_detail.map((s) => (
-                          <span key={s.id} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            {s.name}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-400">No students assigned</p>
-                    )}
+            )}
+          </div>
+          <div className="max-h-80 overflow-y-auto">
+            {!selectedGrade || !selectedSection ? (
+              <div className="px-5 py-8 text-center text-gray-400 text-sm">Select a teacher to see students.</div>
+            ) : matchingStudents.length === 0 ? (
+              <div className="px-5 py-8 text-center text-gray-400 text-sm">
+                No students in Class {selectedGrade}{selectedSection}.
+              </div>
+            ) : (
+              matchingStudents.map((s) => (
+                <div
+                  key={s.id}
+                  onClick={() => toggleStudent(s.id)}
+                  className={`px-5 py-3 flex items-center gap-3 cursor-pointer border-b border-gray-50 transition ${
+                    selectedStudentIds.has(s.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedStudentIds.has(s.id)}
+                    onChange={() => toggleStudent(s.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0"
+                  />
+                  <div>
+                    <p className="font-medium text-gray-800 text-sm">{s.first_name} {s.last_name}</p>
+                    <p className="text-xs text-gray-400">@{s.username} {s.student_id && `· ${s.student_id}`}</p>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => handleDelete(a.id)}
-                  disabled={deleting === a.id}
-                  className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition disabled:opacity-50 self-start"
-                >
-                  {deleting === a.id ? 'Removing...' : 'Remove'}
-                </button>
-              </div>
-            </div>
-          ))}
+              ))
+            )}
+          </div>
         </div>
-      )}
+      </div>
+
+      {/* ── Subject + Assign bar ── */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-8">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Subject *</label>
+            <select
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+            >
+              <option value="">-- Select Subject --</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-[120px]">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+            <select
+              value={selectedGrade}
+              onChange={(e) => setSelectedGrade(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+            >
+              <option value="">--</option>
+              {[1,2,3,4,5,6,7,8,9,10].map((g) => (
+                <option key={g} value={String(g)}>Class {g}</option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-[120px]">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+            <select
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+            >
+              <option value="">--</option>
+              {['A','B','C','D','E'].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex gap-3">
+            {(selectedTeacher || selectedSubject) && (
+              <button type="button" onClick={resetForm} className="px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800 font-medium">
+                Clear
+              </button>
+            )}
+            <button
+              onClick={handleAssign}
+              disabled={submitting || !selectedTeacher || !selectedSubject || !selectedGrade || !selectedSection || selectedStudentIds.size === 0}
+              className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-40"
+            >
+              {submitting ? 'Assigning...' : `Assign (${selectedStudentIds.size})`}
+            </button>
+          </div>
+        </div>
+        {selectedTeacher && selectedSubject && selectedGrade && selectedSection && (
+          <p className="text-xs text-gray-500 mt-3">
+            <span className="font-medium text-gray-700">{teachers.find(t => String(t.id) === selectedTeacher)?.first_name} {teachers.find(t => String(t.id) === selectedTeacher)?.last_name}</span>
+            {' → '}<span className="font-medium text-indigo-600">{subjects.find(s => String(s.id) === selectedSubject)?.name}</span>
+            {' → '}<span className="font-medium text-gray-700">Class {selectedGrade}{selectedSection}</span>
+            {' → '}<span className="font-medium text-purple-600">{selectedStudentIds.size} student(s)</span>
+          </p>
+        )}
+      </div>
+
+      {/* ── Existing Assignments Table ── */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-800">Existing Assignments ({assignments.length})</h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-200">
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">#</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Teacher</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Subject</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Class</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">Students</th>
+                <th className="text-right px-4 py-3 font-semibold text-gray-600">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {assignments.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-400">No assignments yet.</td>
+                </tr>
+              ) : assignments.map((a, i) => (
+                <tr key={a.id} className="hover:bg-gray-50 transition">
+                  <td className="px-4 py-3 text-gray-500">{i + 1}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{a.teacher_name}</td>
+                  <td className="px-4 py-3 text-indigo-600 font-medium">{a.subject_name}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
+                      {a.grade_display || `Class ${a.grade}${a.section}`}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{a.student_count}</td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => handleDelete(a.id)}
+                      disabled={deleting === a.id}
+                      className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                    >
+                      {deleting === a.id ? 'Removing...' : 'Remove'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

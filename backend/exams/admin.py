@@ -3,7 +3,7 @@ from django import forms
 from django.shortcuts import render, redirect
 from django.urls import path
 from django.contrib import messages
-from .models import ExamType, Subject, Chapter, Question, UserExam, UserAnswer, ExamPaper, AssignedExam, TeacherAssignment
+from .models import ExamType, Subject, Chapter, Question, UserExam, UserAnswer, ExamPaper, AssignedExam, TeacherAssignment, HandwrittenExam
 from .question_fetchers import get_fetcher
 
 
@@ -175,9 +175,8 @@ class ExamPaperAdmin(admin.ModelAdmin):
 
 @admin.register(TeacherAssignment)
 class TeacherAssignmentAdmin(admin.ModelAdmin):
-    list_display = ['teacher', 'subject', 'school', 'created_at']
-    list_filter = ['school', 'subject']
-    filter_horizontal = ['students']
+    list_display = ['teacher', 'subject', 'grade', 'section', 'school', 'created_at']
+    list_filter = ['school', 'subject', 'grade', 'section']
 
 @admin.register(AssignedExam)
 class AssignedExamAdmin(admin.ModelAdmin):
@@ -185,3 +184,10 @@ class AssignedExamAdmin(admin.ModelAdmin):
     list_filter = ['school', 'is_active', 'subject']
     search_fields = ['title']
     filter_horizontal = ['assigned_to', 'chapters']
+
+@admin.register(HandwrittenExam)
+class HandwrittenExamAdmin(admin.ModelAdmin):
+    list_display = ['title', 'subject', 'school', 'teacher', 'student_name', 'status', 'obtained_marks', 'total_marks', 'created_at']
+    list_filter = ['school', 'status', 'subject']
+    search_fields = ['title', 'student_name']
+    readonly_fields = ['created_at']

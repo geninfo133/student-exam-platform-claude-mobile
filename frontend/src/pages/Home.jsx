@@ -10,7 +10,7 @@ export default function Home() {
       <section className="bg-gradient-to-br from-indigo-700 via-indigo-600 to-purple-700 text-white py-20">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-4">
-            Ace Your 10th Board Exams
+            Student Management and Exam Platform
           </h1>
           <p className="text-lg md:text-xl text-indigo-100 mb-8 max-w-2xl mx-auto">
             Practice with AI-graded exams covering CBSE &amp; State Board.

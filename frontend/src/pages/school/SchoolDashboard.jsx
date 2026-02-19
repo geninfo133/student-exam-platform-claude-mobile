@@ -96,12 +96,23 @@ export default function SchoolDashboard() {
       >
         <div className={`absolute inset-0 ${bgImages.school_dashboard?.url ? 'bg-black/50' : 'bg-gradient-to-r from-indigo-600 to-purple-600'}`}></div>
         <div className="relative z-10">
-          <h1 className="text-2xl md:text-3xl font-bold">
-            Welcome, {user?.first_name || user?.username}!
-          </h1>
-          <p className="mt-2 text-white/80">
-            School Administration Dashboard
-          </p>
+          <div className="flex items-center gap-4 mb-4">
+            {user?.profile_photo ? (
+              <img src={user.profile_photo} alt="Profile" className="w-16 h-16 rounded-full object-cover border-2 border-white/50 shrink-0" />
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold shrink-0">
+                {(user?.first_name?.[0] || user?.username?.[0] || '?').toUpperCase()}
+              </div>
+            )}
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold">
+                Welcome, {user?.first_name || user?.username}!
+              </h1>
+              <p className="mt-1 text-white/80">
+                School Administration Dashboard
+              </p>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-3 mt-5">
             <Link to="/school/teachers" className="inline-flex items-center gap-2 bg-white text-indigo-700 px-6 py-2.5 rounded-lg font-medium hover:bg-indigo-50 transition shadow-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

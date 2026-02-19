@@ -115,6 +115,7 @@ class UserExam(models.Model):
     ]
     GRADING_STATUS_CHOICES = [
         ('NOT_STARTED', 'Not Started'),
+        ('PENDING_REVIEW', 'Pending Teacher Review'),
         ('GRADING_MCQ', 'Grading MCQs'),
         ('GRADING_DESCRIPTIVE', 'AI Grading Descriptive'),
         ('ANALYZING', 'Generating Analysis'),
@@ -259,7 +260,7 @@ class ExamPaper(models.Model):
 
 
 class TeacherAssignment(models.Model):
-    """Maps a teacher to a subject and their assigned students"""
+    """Maps a teacher to a subject for a specific class and section"""
     school = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='school_teacher_assignments',
@@ -269,19 +270,68 @@ class TeacherAssignment(models.Model):
         related_name='teaching_assignments',
     )
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
-    students = models.ManyToManyField(
-        settings.AUTH_USER_MODEL, blank=True,
-        related_name='student_teacher_assignments',
-    )
+    grade = models.CharField(max_length=2, default='10')
+    section = models.CharField(max_length=1, default='A')
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.teacher.get_full_name()} - {self.subject.name}"
+        return f"{self.teacher.get_full_name()} - {self.subject.name} (Class {self.grade}{self.section})"
+
+    def get_students(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        return User.objects.filter(
+            school=self.school, role='student',
+            grade=self.grade, section=self.section, is_active=True,
+        )
 
     class Meta:
         db_table = 'teacher_assignments'
-        unique_together = ['teacher', 'subject']
+        unique_together = ['teacher', 'subject', 'grade', 'section']
         ordering = ['teacher', 'subject']
+
+
+
+class HandwrittenExam(models.Model):
+    """Uploaded handwritten answer sheets for AI grading"""
+    STATUS_CHOICES = [
+        ('UPLOADED', 'Uploaded'),
+        ('PROCESSING', 'Processing'),
+        ('GRADED', 'Graded'),
+        ('FAILED', 'Failed'),
+    ]
+    school = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='handwritten_exams',
+    )
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='handwritten_uploaded',
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        null=True, blank=True, related_name='handwritten_taken',
+    )
+    student_name = models.CharField(max_length=200, blank=True)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)
+    answer_sheet = models.FileField(upload_to='handwritten/answers/%Y/%m/')
+    question_paper = models.FileField(upload_to='handwritten/questions/%Y/%m/')
+    total_marks = models.IntegerField(default=50)
+    obtained_marks = models.FloatField(null=True, blank=True)
+    percentage = models.FloatField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='UPLOADED')
+    grading_data = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        name = self.student_name or (self.student.get_full_name() if self.student else 'Unknown')
+        return f"{self.title} - {name}"
+
+    class Meta:
+        db_table = 'handwritten_exams'
+        ordering = ['-created_at']
 
 
 class AssignedExam(models.Model):
@@ -314,4 +364,34 @@ class AssignedExam(models.Model):
 
     class Meta:
         db_table = 'assigned_exams'
+        ordering = ['-created_at']
+
+
+# New model for answer sheet uploads and answer keys
+class AnswerSheetUpload(models.Model):
+    """Teacher uploads answer sheet images and answer keys for AI valuation"""
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='uploaded_answer_sheets',
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='answer_sheets',
+    )
+    assigned_exam = models.ForeignKey(
+        AssignedExam, on_delete=models.CASCADE,
+        related_name='answer_sheet_uploads',
+    )
+    answer_sheet_image = models.ImageField(upload_to='answer_sheets/%Y/%m/')
+    answer_key_file = models.FileField(upload_to='answer_keys/%Y/%m/', blank=True, null=True)
+    ai_valuation = models.JSONField(default=dict, blank=True, help_text='AI valuation results')
+    ai_analysis = models.JSONField(default=dict, blank=True, help_text='AI analysis data')
+    teacher_feedback = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"AnswerSheet {self.student.username} - {self.assigned_exam.title}"
+
+    class Meta:
+        db_table = 'answer_sheet_uploads'
         ordering = ['-created_at']

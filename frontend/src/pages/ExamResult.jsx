@@ -19,6 +19,9 @@ export default function ExamResult() {
 
       if (['NOT_STARTED', 'GRADING_MCQ', 'GRADING_DESCRIPTIVE', 'ANALYZING'].includes(res.data.grading_status)) {
         setPolling(true);
+      } else if (res.data.grading_status === 'PENDING_REVIEW') {
+        setPolling(false);
+        setLoading(false);
       } else {
         setPolling(false);
         setLoading(false);
@@ -49,6 +52,7 @@ export default function ExamResult() {
 
   if (!exam) return <div className="text-center py-12 text-gray-500">Exam not found</div>;
 
+  const isPendingReview = exam.grading_status === 'PENDING_REVIEW';
   const isGrading = ['NOT_STARTED', 'GRADING_MCQ', 'GRADING_DESCRIPTIVE', 'ANALYZING'].includes(exam.grading_status);
 
   // Chart data
@@ -75,6 +79,7 @@ export default function ExamResult() {
 
   const gradingLabel = {
     NOT_STARTED: 'Preparing...',
+    PENDING_REVIEW: 'Submitted - Waiting for Teacher Review',
     GRADING_MCQ: 'Grading MCQs...',
     GRADING_DESCRIPTIVE: 'AI Grading Descriptive Answers...',
     ANALYZING: 'Generating Analysis...',
@@ -84,6 +89,18 @@ export default function ExamResult() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
+      {/* Pending teacher review */}
+      {isPendingReview && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 mb-6 text-center">
+          <div className="text-4xl mb-3">📝</div>
+          <h2 className="text-lg font-semibold text-amber-800">Exam Submitted Successfully</h2>
+          <p className="text-amber-600 mt-2">Your teacher will review and grade your exam. Results will appear here once grading is complete.</p>
+          <Link to="/dashboard" className="inline-block mt-4 bg-amber-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-amber-700 transition text-sm">
+            Back to Dashboard
+          </Link>
+        </div>
+      )}
+
       {/* Grading status banner */}
       {isGrading && (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6 mb-6 text-center">
@@ -93,6 +110,7 @@ export default function ExamResult() {
         </div>
       )}
 
+      {!isPendingReview && (<>
       {/* Score Card */}
       <div className={`rounded-2xl p-8 text-white mb-8 ${
         exam.percentage >= 80 ? 'bg-gradient-to-r from-green-500 to-emerald-600' :
@@ -334,6 +352,8 @@ export default function ExamResult() {
           ))}
         </div>
       )}
+
+      </>)}
 
       {/* Actions */}
       <div className="flex gap-4">

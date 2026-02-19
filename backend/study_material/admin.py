@@ -9,8 +9,8 @@ class KeyConceptInline(admin.TabularInline):
 
 @admin.register(StudyMaterial)
 class StudyMaterialAdmin(admin.ModelAdmin):
-    list_display = ['title', 'chapter', 'order', 'is_active']
-    list_filter = ['chapter__subject', 'is_active']
+    list_display = ['title', 'chapter', 'order', 'is_active', 'uploaded_by', 'created_at']
+    list_filter = ['chapter__subject', 'is_active', 'uploaded_by']
     inlines = [KeyConceptInline]
 
 

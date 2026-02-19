@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from exams.models import Chapter
 
@@ -5,7 +6,12 @@ from exams.models import Chapter
 class StudyMaterial(models.Model):
     chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='study_materials')
     title = models.CharField(max_length=200)
-    content = models.TextField()
+    content = models.TextField(blank=True)
+    file = models.FileField(upload_to='study_materials/%Y/%m/', blank=True, null=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='uploaded_study_materials',
+    )
     order = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

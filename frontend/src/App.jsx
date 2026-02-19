@@ -15,6 +15,7 @@ import TakeExam from './pages/TakeExam';
 import ExamResult from './pages/ExamResult';
 import ExamHistory from './pages/ExamHistory';
 import AssignedExams from './pages/AssignedExams';
+import StudentAnalytics from './pages/StudentAnalytics';
 import TeacherDashboard from './pages/teacher/TeacherDashboard';
 import UploadPaper from './pages/teacher/UploadPaper';
 import PapersList from './pages/teacher/PapersList';
@@ -23,6 +24,10 @@ import ExamResults from './pages/teacher/ExamResults';
 import ReviewAnswers from './pages/teacher/ReviewAnswers';
 import CreateFromPapers from './pages/teacher/CreateFromPapers';
 import GeneratePaper from './pages/teacher/GeneratePaper';
+import HandwrittenList from './pages/teacher/HandwrittenList';
+import UploadHandwritten from './pages/teacher/UploadHandwritten';
+import TeacherAnalytics from './pages/teacher/TeacherAnalytics';
+import ManageStudyMaterials from './pages/teacher/ManageStudyMaterials';
 import SchoolDashboard from './pages/school/SchoolDashboard';
 import ManageTeachers from './pages/school/ManageTeachers';
 import ManageStudents from './pages/school/ManageStudents';
@@ -48,6 +53,7 @@ export default function App() {
             <Route path="/result/:examId" element={<ProtectedRoute><ExamResult /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute><ExamHistory /></ProtectedRoute>} />
             <Route path="/assigned-exams" element={<ProtectedRoute><AssignedExams /></ProtectedRoute>} />
+            <Route path="/analytics" element={<ProtectedRoute><StudentAnalytics /></ProtectedRoute>} />
 
             {/* School Routes */}
             <Route path="/school/dashboard" element={<RoleProtectedRoute allowedRoles={['school']}><SchoolDashboard /></RoleProtectedRoute>} />
@@ -67,6 +73,10 @@ export default function App() {
             <Route path="/teacher/exams" element={<RoleProtectedRoute allowedRoles={['teacher']}><ExamResults /></RoleProtectedRoute>} />
             <Route path="/teacher/results" element={<RoleProtectedRoute allowedRoles={['teacher']}><ExamResults /></RoleProtectedRoute>} />
             <Route path="/teacher/review/:examId" element={<RoleProtectedRoute allowedRoles={['teacher']}><ReviewAnswers /></RoleProtectedRoute>} />
+            <Route path="/teacher/handwritten" element={<RoleProtectedRoute allowedRoles={['teacher']}><HandwrittenList /></RoleProtectedRoute>} />
+            <Route path="/teacher/upload-handwritten" element={<RoleProtectedRoute allowedRoles={['teacher']}><UploadHandwritten /></RoleProtectedRoute>} />
+            <Route path="/teacher/analytics" element={<RoleProtectedRoute allowedRoles={['teacher']}><TeacherAnalytics /></RoleProtectedRoute>} />
+            <Route path="/teacher/study-materials" element={<RoleProtectedRoute allowedRoles={['teacher']}><ManageStudyMaterials /></RoleProtectedRoute>} />
           </Route>
         </Routes>
       </AuthProvider>

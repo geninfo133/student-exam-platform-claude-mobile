@@ -1,5 +1,6 @@
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes as perm_classes
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 
@@ -30,6 +31,7 @@ class RegisterView(generics.CreateAPIView):
 class ProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_object(self):
         return self.request.user
@@ -77,7 +79,7 @@ class SchoolMembersListView(generics.ListAPIView):
 
 
 class TeacherStudentListView(generics.ListAPIView):
-    """Teacher lists students. If ?subject=ID is given, filter to students assigned to this teacher for that subject."""
+    """Teacher lists students by grade/section from their assignments."""
     serializer_class = MemberListSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacherUser]
 
@@ -85,23 +87,28 @@ class TeacherStudentListView(generics.ListAPIView):
         from exams.models import TeacherAssignment
         teacher = self.request.user
         subject_id = self.request.query_params.get('subject')
+        grade = self.request.query_params.get('grade')
+        section = self.request.query_params.get('section')
 
+        assignments_qs = TeacherAssignment.objects.filter(teacher=teacher)
         if subject_id:
-            # Filter to students assigned to this teacher for this subject
-            assignment = TeacherAssignment.objects.filter(
-                teacher=teacher, subject_id=subject_id,
-            ).first()
-            if assignment:
-                return assignment.students.order_by('first_name')
-            return User.objects.none()
+            assignments_qs = assignments_qs.filter(subject_id=subject_id)
+        if grade:
+            assignments_qs = assignments_qs.filter(grade=grade)
+        if section:
+            assignments_qs = assignments_qs.filter(section=section)
 
-        # No subject filter: return all students assigned to this teacher (across all subjects)
-        assigned_student_ids = TeacherAssignment.objects.filter(
-            teacher=teacher,
-        ).values_list('students__id', flat=True).distinct()
+        # Collect unique grade/section combos from assignments
+        grade_sections = assignments_qs.values_list('grade', 'section').distinct()
 
-        if assigned_student_ids:
-            return User.objects.filter(id__in=assigned_student_ids, role='student').order_by('first_name')
+        if grade_sections:
+            from django.db.models import Q
+            q = Q()
+            for g, s in grade_sections:
+                q |= Q(grade=g, section=s)
+            return User.objects.filter(
+                q, school=teacher.school, role='student', is_active=True,
+            ).order_by('grade', 'section', 'first_name')
 
         # Fallback: if teacher has no assignments, show all school students
         return User.objects.filter(

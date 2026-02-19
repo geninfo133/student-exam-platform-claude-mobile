@@ -150,30 +150,30 @@ class Command(BaseCommand):
         if math and len(teachers) > 0:
             ta1, created = TeacherAssignment.objects.get_or_create(
                 school=school, teacher=teachers[0], subject=math,
+                grade='10', section='A',
             )
             if created:
-                ta1.students.set(students[:3])  # Class 10 students to teacher1 for Math
-                self.stdout.write(self.style.SUCCESS(f'  Assigned teacher1 → Mathematics with 3 students'))
+                self.stdout.write(self.style.SUCCESS(f'  Assigned teacher1 → Mathematics Class 10A'))
             else:
                 self.stdout.write(f'  teacher1 → Mathematics assignment already exists.')
 
         if science and len(teachers) > 1:
             ta2, created = TeacherAssignment.objects.get_or_create(
                 school=school, teacher=teachers[1], subject=science,
+                grade='10', section='A',
             )
             if created:
-                ta2.students.set(students)  # All students to teacher2 for Science
-                self.stdout.write(self.style.SUCCESS(f'  Assigned teacher2 → Science with {len(students)} students'))
+                self.stdout.write(self.style.SUCCESS(f'  Assigned teacher2 → Science Class 10A'))
             else:
                 self.stdout.write(f'  teacher2 → Science assignment already exists.')
 
         if english and len(teachers) > 0:
             ta3, created = TeacherAssignment.objects.get_or_create(
                 school=school, teacher=teachers[0], subject=english,
+                grade='10', section='A',
             )
             if created:
-                ta3.students.set(students[:3])
-                self.stdout.write(self.style.SUCCESS(f'  Assigned teacher1 → English with 3 students'))
+                self.stdout.write(self.style.SUCCESS(f'  Assigned teacher1 → English Class 10A'))
 
         # ---- Assigned Exams ----
         if not math and not science:

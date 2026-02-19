@@ -28,6 +28,14 @@ from exams.api_views import (
     TeacherDashboardStatsView, SchoolDashboardStatsView,
     TeacherAssignmentListView, TeacherAssignmentCreateView,
     TeacherAssignmentDeleteView, TeacherMyAssignmentsView,
+    HandwrittenExamUploadView, HandwrittenExamProcessView,
+    HandwrittenExamListView, HandwrittenExamDetailView,
+    HandwrittenExamDeleteView, StudentHandwrittenListView,
+    TeacherAnalyticsView,
+    StudentAnalyticsView,
+    GenerateExamAnalysisView,
+    TeacherGradeExamView,
+    PendingReviewListView,
 )
 
 urlpatterns = [
@@ -77,6 +85,9 @@ urlpatterns = [
 
     # Teacher review
     path('api/exams/review/<int:exam_id>/', TeacherReviewView.as_view(), name='api-teacher-review'),
+    path('api/exams/<int:exam_id>/analyze/', GenerateExamAnalysisView.as_view(), name='api-generate-analysis'),
+    path('api/exams/<int:exam_id>/grade/', TeacherGradeExamView.as_view(), name='api-teacher-grade-exam'),
+    path('api/exams/pending-review/', PendingReviewListView.as_view(), name='api-pending-review'),
 
     # Teacher assignments (school manages)
     path('api/assignments/', TeacherAssignmentListView.as_view(), name='api-assignments'),
@@ -84,9 +95,21 @@ urlpatterns = [
     path('api/assignments/<int:pk>/', TeacherAssignmentDeleteView.as_view(), name='api-assignment-delete'),
     path('api/assignments/my/', TeacherMyAssignmentsView.as_view(), name='api-my-assignments'),
 
+    # Handwritten answer sheet grading
+    path('api/handwritten/upload/', HandwrittenExamUploadView.as_view(), name='api-handwritten-upload'),
+    path('api/handwritten/<int:pk>/process/', HandwrittenExamProcessView.as_view(), name='api-handwritten-process'),
+    path('api/handwritten/', HandwrittenExamListView.as_view(), name='api-handwritten-list'),
+    path('api/handwritten/<int:pk>/', HandwrittenExamDetailView.as_view(), name='api-handwritten-detail'),
+    path('api/handwritten/<int:pk>/delete/', HandwrittenExamDeleteView.as_view(), name='api-handwritten-delete'),
+    path('api/handwritten/my/', StudentHandwrittenListView.as_view(), name='api-student-handwritten'),
+
     # Dashboard stats
     path('api/dashboard/teacher/', TeacherDashboardStatsView.as_view(), name='api-teacher-dashboard'),
     path('api/dashboard/school/', SchoolDashboardStatsView.as_view(), name='api-school-dashboard'),
+
+    # Analytics
+    path('api/analytics/teacher/', TeacherAnalyticsView.as_view(), name='api-teacher-analytics'),
+    path('api/analytics/student/', StudentAnalyticsView.as_view(), name='api-student-analytics'),
 
     # Site images
     path('api/site-images/', site_images_view, name='api-site-images'),

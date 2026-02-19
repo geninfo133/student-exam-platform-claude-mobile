@@ -7,6 +7,7 @@ export default function CreateExam() {
   const [assignments, setAssignments] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [students, setStudents] = useState([]);
+  const [selectedAssignment, setSelectedAssignment] = useState('');
   const [form, setForm] = useState({
     title: '',
     subject: '',
@@ -36,11 +37,12 @@ export default function CreateExam() {
     fetchAssignments();
   }, []);
 
-  // When subject changes, fetch chapters and load mapped students
+  // When subject changes, fetch chapters and reset assignment selection
   useEffect(() => {
     if (!form.subject) {
       setChapters([]);
       setStudents([]);
+      setSelectedAssignment('');
       setForm((prev) => ({ ...prev, chapter_ids: [], student_ids: [] }));
       return;
     }
@@ -55,34 +57,43 @@ export default function CreateExam() {
       }
     };
     fetchChapters();
+    setSelectedAssignment('');
+    setStudents([]);
+    setForm((prev) => ({ ...prev, student_ids: [] }));
+  }, [form.subject]);
 
-    // Load students from the selected assignment
-    const assignment = assignments.find((a) => String(a.subject) === String(form.subject));
-    if (assignment && assignment.students_detail) {
-      setStudents(assignment.students_detail);
-      // Auto-select all mapped students
-      setForm((prev) => ({ ...prev, student_ids: assignment.students_detail.map((s) => s.id) }));
-    } else {
-      // Fallback: fetch all students for the subject from the API
-      const fetchStudents = async () => {
-        try {
-          const res = await api.get('/api/auth/my-students/', { params: { subject: form.subject } });
-          const data = res.data.results || res.data;
-          setStudents(data);
-          setForm((prev) => ({ ...prev, student_ids: data.map((s) => s.id) }));
-        } catch (err) {
-          console.error(err);
-        }
-      };
-      fetchStudents();
+  // When assignment (class/section) is selected, fetch students
+  useEffect(() => {
+    if (!selectedAssignment) {
+      setStudents([]);
+      setForm((prev) => ({ ...prev, student_ids: [] }));
+      return;
     }
-  }, [form.subject, assignments]);
+    const assignment = assignments.find((a) => String(a.id) === String(selectedAssignment));
+    if (!assignment) return;
+
+    const fetchStudents = async () => {
+      try {
+        const res = await api.get('/api/auth/my-students/', {
+          params: { subject: assignment.subject, grade: assignment.grade, section: assignment.section },
+        });
+        const data = res.data.results || res.data;
+        setStudents(data);
+        setForm((prev) => ({ ...prev, student_ids: data.map((s) => s.id) }));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchStudents();
+  }, [selectedAssignment, assignments]);
 
   // Derive unique subjects from teacher's assignments
-  const subjects = assignments.map((a) => ({
-    id: a.subject,
-    name: a.subject_name,
-  }));
+  const subjectMap = {};
+  assignments.forEach((a) => { subjectMap[a.subject] = a.subject_name; });
+  const subjects = Object.entries(subjectMap).map(([id, name]) => ({ id, name }));
+
+  // Get assignments for the currently selected subject
+  const subjectAssignments = assignments.filter((a) => String(a.subject) === String(form.subject));
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -210,6 +221,25 @@ export default function CreateExam() {
           )}
         </div>
 
+        {/* Class/Section selector */}
+        {form.subject && subjectAssignments.length > 0 && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Class & Section</label>
+            <select
+              value={selectedAssignment}
+              onChange={(e) => setSelectedAssignment(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+            >
+              <option value="">Select Class/Section</option>
+              {subjectAssignments.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.grade_display || `Class ${a.grade}${a.section}`} ({a.student_count} students)
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Chapters multi-select */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Chapters</label>
@@ -308,8 +338,10 @@ export default function CreateExam() {
           </div>
           {!form.subject ? (
             <p className="text-sm text-gray-400">Select a subject to see assigned students</p>
+          ) : !selectedAssignment ? (
+            <p className="text-sm text-gray-400">Select a class/section to load students</p>
           ) : students.length === 0 ? (
-            <p className="text-sm text-gray-400">No students mapped for this subject</p>
+            <p className="text-sm text-gray-400">No students found in this class/section</p>
           ) : (
             <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
               {students.map((stu) => (
