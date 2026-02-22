@@ -12,7 +12,7 @@ export default function RoleProtectedRoute({ children, allowedRoles }) {
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/" replace />;
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Redirect to appropriate dashboard based on role

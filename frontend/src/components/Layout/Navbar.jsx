@@ -9,7 +9,7 @@ export default function Navbar() {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const getNavLinks = () => {
@@ -22,15 +22,17 @@ export default function Navbar() {
           { to: '/school/subjects', label: 'Subjects' },
           { to: '/school/teachers', label: 'Teachers' },
           { to: '/school/students', label: 'Students' },
-          { to: '/school/assignments', label: 'Assignments' },
-          { to: '/school/images', label: 'Images' },
+          { to: '/teacher/generate-paper', label: 'Generate Questions' },
+          { to: '/teacher/papers', label: 'Papers' },
+          { to: '/teacher/exams', label: 'Exams' },
           { to: '/profile', label: 'Profile' },
         ];
       case 'teacher':
         return [
           { to: '/teacher/dashboard', label: 'Dashboard' },
-          { to: '/teacher/generate-paper', label: 'Generate' },
-          { to: '/teacher/papers', label: 'Papers' },
+          { to: '/teacher/generate-paper', label: 'Generate Questions' },
+          { to: '/teacher/papers', label: 'Uploaded Papers' },
+          { to: '/teacher/handwritten', label: 'Handwritten' },
           { to: '/teacher/exams', label: 'Exams' },
           { to: '/teacher/results', label: 'Results' },
           { to: '/profile', label: 'Profile' },
@@ -40,6 +42,7 @@ export default function Navbar() {
           { to: '/dashboard', label: 'Dashboard' },
           { to: '/subjects', label: 'Subjects' },
           { to: '/assigned-exams', label: 'Assigned' },
+          { to: '/handwritten-results', label: 'Handwritten' },
           { to: '/history', label: 'History' },
           { to: '/profile', label: 'Profile' },
         ];
@@ -47,14 +50,25 @@ export default function Navbar() {
   };
 
   const navLinks = getNavLinks();
-  const roleLabel = user?.role === 'school' ? 'School' : user?.role === 'teacher' ? 'Teacher' : '';
+  const getOrgLabel = () => {
+    if (!user) return '';
+    if (user.role === 'teacher') return 'Teacher';
+    if (user.role === 'school') {
+      const t = user.org_type;
+      if (t === 'college') return 'College';
+      if (t === 'coaching') return 'Coaching Centre';
+      return 'School';
+    }
+    return '';
+  };
+  const roleLabel = getOrgLabel();
 
   return (
     <nav className="bg-indigo-700 text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           <Link to={user ? getDashboardPath() : '/'} className="text-xl font-bold tracking-tight">
-            ExamPrep 10th
+            {user ? (user.school_name || user.school_account_name || 'ExamPrep') : 'ExamPrep'}
             {roleLabel && <span className="ml-2 text-xs bg-indigo-500 px-2 py-0.5 rounded-full">{roleLabel}</span>}
           </Link>
 

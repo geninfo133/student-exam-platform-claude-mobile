@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const roles = [
@@ -12,7 +12,7 @@ const roles = [
       </svg>
     ),
     color: 'indigo',
-    desc: 'Admin dashboard',
+    desc: 'Admin login',
   },
   {
     key: 'teacher',
@@ -56,7 +56,23 @@ const colorMap = {
   },
 };
 
+const orgLabelMap = {
+  school: { label: 'School', desc: 'School admin login' },
+  college: { label: 'College', desc: 'College admin login' },
+  coaching: { label: 'Coaching Centre', desc: 'Coaching admin login' },
+};
+
 export default function Login() {
+  const [searchParams] = useSearchParams();
+  const orgType = searchParams.get('org_type');
+  const orgOverride = orgLabelMap[orgType];
+
+  const visibleRoles = roles.map((r) =>
+    r.key === 'school' && orgOverride
+      ? { ...r, label: orgOverride.label, desc: orgOverride.desc }
+      : r
+  );
+
   const [selectedRole, setSelectedRole] = useState('student');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -70,8 +86,11 @@ export default function Login() {
     setError('');
     setLoading(true);
     try {
-      await login(username, password);
-      setTimeout(() => navigate(getDashboardPath()), 50);
+      const profile = await login(username, password);
+      const path = profile.role === 'school' ? '/school/dashboard'
+        : profile.role === 'teacher' ? '/teacher/dashboard'
+        : '/dashboard';
+      navigate(path);
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid credentials');
     } finally {
@@ -79,7 +98,7 @@ export default function Login() {
     }
   };
 
-  const activeRole = roles.find((r) => r.key === selectedRole);
+  const activeRole = visibleRoles.find((r) => r.key === selectedRole);
   const colors = colorMap[activeRole.color];
 
   return (
@@ -91,7 +110,7 @@ export default function Login() {
 
           {/* Role selector */}
           <div className="grid grid-cols-3 gap-3 mb-6">
-            {roles.map((role) => {
+            {visibleRoles.map((role) => {
               const rc = colorMap[role.color];
               const isSelected = selectedRole === role.key;
               return (
@@ -161,7 +180,7 @@ export default function Login() {
 
           <p className="text-center mt-6 text-gray-600 text-sm">
             Don't have an account?{' '}
-            <Link to="/register" className="text-indigo-600 font-medium hover:underline">Register</Link>
+            <Link to={orgType ? `/register?org_type=${orgType}` : '/register'} className="text-indigo-600 font-medium hover:underline">Register</Link>
           </p>
         </div>
       </div>
