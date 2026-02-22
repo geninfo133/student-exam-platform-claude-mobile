@@ -82,7 +82,7 @@ export default function ManageImages() {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
+      <div className="bg-gradient-to-r from-gray-900 to-indigo-600 rounded-2xl p-8 text-white mb-8">
         <h1 className="text-2xl md:text-3xl font-bold">Background Images</h1>
         <p className="mt-2 text-white/80">Upload background images for your school pages. Each page can have its own image.</p>
       </div>

@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ManageSubjects() {
+  const { user } = useAuth();
+  const isCoaching = user?.org_type === 'coaching';
+  const classFrom = user?.class_from || 1;
+  const classTo = user?.class_to || 12;
+  const classRange = isCoaching ? [] : Array.from({ length: classTo - classFrom + 1 }, (_, i) => classFrom + i);
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState({});
   const [loading, setLoading] = useState(true);
@@ -10,13 +16,23 @@ export default function ManageSubjects() {
 
   // Subject form
   const [showSubjectForm, setShowSubjectForm] = useState(false);
-  const [subjectForm, setSubjectForm] = useState({ name: '', code: '' });
+  const [subjectForm, setSubjectForm] = useState({ name: '', code: '', grade: '' });
   const [submittingSubject, setSubmittingSubject] = useState(false);
 
   // Chapter form
   const [chapterForSubject, setChapterForSubject] = useState(null);
   const [chapterForm, setChapterForm] = useState({ name: '', code: '' });
   const [submittingChapter, setSubmittingChapter] = useState(false);
+
+  // Edit subject
+  const [editingSubjectId, setEditingSubjectId] = useState(null);
+  const [editSubjectForm, setEditSubjectForm] = useState({ name: '', code: '' });
+  const [savingSubject, setSavingSubject] = useState(false);
+
+  // Edit chapter
+  const [editingChapterId, setEditingChapterId] = useState(null);
+  const [editChapterForm, setEditChapterForm] = useState({ name: '', code: '' });
+  const [savingChapter, setSavingChapter] = useState(false);
 
   const [expandedSubject, setExpandedSubject] = useState(null);
   const [deleting, setDeleting] = useState(null);
@@ -68,7 +84,7 @@ export default function ManageSubjects() {
     try {
       await api.post('/api/subjects/create/', subjectForm);
       showMsg('Subject created successfully!');
-      setSubjectForm({ name: '', code: '' });
+      setSubjectForm({ name: '', code: '', grade: '' });
       setShowSubjectForm(false);
       fetchSubjects();
     } catch (err) {
@@ -124,6 +140,56 @@ export default function ManageSubjects() {
     }
   };
 
+  const startEditSubject = (subject) => {
+    setEditingSubjectId(subject.id);
+    setEditSubjectForm({ name: subject.name, code: subject.code });
+  };
+
+  const cancelEditSubject = () => {
+    setEditingSubjectId(null);
+    setEditSubjectForm({ name: '', code: '' });
+  };
+
+  const handleSaveSubject = async (id) => {
+    setSavingSubject(true);
+    try {
+      await api.patch(`/api/subjects/${id}/update/`, editSubjectForm);
+      showMsg('Subject updated successfully!');
+      cancelEditSubject();
+      fetchSubjects();
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to update subject.';
+      showMsg(msg, 'error');
+    } finally {
+      setSavingSubject(false);
+    }
+  };
+
+  const startEditChapter = (chapter) => {
+    setEditingChapterId(chapter.id);
+    setEditChapterForm({ name: chapter.name, code: chapter.code });
+  };
+
+  const cancelEditChapter = () => {
+    setEditingChapterId(null);
+    setEditChapterForm({ name: '', code: '' });
+  };
+
+  const handleSaveChapter = async (subjectId, chapterId) => {
+    setSavingChapter(true);
+    try {
+      await api.patch(`/api/chapters/${chapterId}/update/`, editChapterForm);
+      showMsg('Chapter updated successfully!');
+      cancelEditChapter();
+      fetchChapters(subjectId);
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to update chapter.';
+      showMsg(msg, 'error');
+    } finally {
+      setSavingChapter(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center py-20">
@@ -139,10 +205,10 @@ export default function ManageSubjects() {
         className="rounded-2xl p-8 md:p-10 text-white mb-8 bg-cover bg-center relative overflow-hidden"
         style={bgImages.manage_subjects?.url ? { backgroundImage: `url(${bgImages.manage_subjects.url})` } : {}}
       >
-        <div className={`absolute inset-0 ${bgImages.manage_subjects?.url ? 'bg-black/50' : 'bg-gradient-to-r from-indigo-600 to-purple-600'}`}></div>
+        <div className={`absolute inset-0 ${bgImages.manage_subjects?.url ? 'bg-black/50' : 'bg-gradient-to-r from-gray-900 to-indigo-600'}`}></div>
         <div className="relative z-10">
           <h1 className="text-2xl md:text-3xl font-bold">Manage Subjects & Chapters</h1>
-          <p className="mt-2 text-white/80">Create subjects and organize chapters for your school curriculum.</p>
+          <p className="mt-2 text-white/80">{isCoaching ? 'Create subjects and organize chapters for your coaching programme.' : 'Create subjects and organize chapters for your school curriculum.'}</p>
         </div>
       </div>
 
@@ -190,6 +256,22 @@ export default function ManageSubjects() {
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
           <h3 className="text-lg font-semibold text-gray-800 mb-5">Create New Subject</h3>
           <form onSubmit={handleCreateSubject} className="space-y-5">
+            {!isCoaching && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
+                <select
+                  value={subjectForm.grade}
+                  onChange={(e) => setSubjectForm({ ...subjectForm, grade: e.target.value })}
+                  required
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
+                >
+                  <option value="">Select Class</option>
+                  {classRange.map(g => (
+                    <option key={g} value={String(g)}>Class {g}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Subject Name *</label>
@@ -208,7 +290,7 @@ export default function ManageSubjects() {
                   onChange={(e) => setSubjectForm({ ...subjectForm, code: e.target.value.toUpperCase() })}
                   required
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  placeholder="e.g. MATH"
+                  placeholder="e.g. MATH10"
                 />
               </div>
             </div>
@@ -222,7 +304,7 @@ export default function ManageSubjects() {
               </button>
               <button
                 type="button"
-                onClick={() => { setShowSubjectForm(false); setSubjectForm({ name: '', code: '' }); }}
+                onClick={() => { setShowSubjectForm(false); setSubjectForm({ name: '', code: '', grade: '' }); }}
                 className="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition"
               >
                 Cancel
@@ -260,7 +342,10 @@ export default function ManageSubjects() {
                   </div>
                   <div>
                     <h3 className="font-semibold text-gray-800">{subject.name}</h3>
-                    <div className="flex gap-3 mt-1">
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {!isCoaching && subject.grade && (
+                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium">Class {subject.grade}</span>
+                      )}
                       <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{subject.code}</span>
                       <span className="text-xs text-gray-400">{subject.chapter_count || 0} chapters</span>
                       <span className="text-xs text-gray-400">{subject.question_count || 0} questions</span>
@@ -268,6 +353,12 @@ export default function ManageSubjects() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); startEditSubject(subject); }}
+                    className="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-100 transition"
+                  >
+                    Edit
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleDeleteSubject(subject.id); }}
                     disabled={deleting === `subject-${subject.id}`}
@@ -280,6 +371,47 @@ export default function ManageSubjects() {
                   </svg>
                 </div>
               </div>
+
+              {/* Inline Edit Subject Form */}
+              {editingSubjectId === subject.id && (
+                <div className="border-t border-gray-100 bg-indigo-50/30 px-5 py-4">
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div className="flex-1 min-w-[160px]">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                      <input
+                        value={editSubjectForm.name}
+                        onChange={(e) => setEditSubjectForm({ ...editSubjectForm, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                        placeholder="Subject name"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[120px]">
+                      <label className="block text-xs font-medium text-gray-600 mb-1">Code</label>
+                      <input
+                        value={editSubjectForm.code}
+                        onChange={(e) => setEditSubjectForm({ ...editSubjectForm, code: e.target.value.toUpperCase() })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                        placeholder="Code"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleSaveSubject(subject.id)}
+                        disabled={savingSubject}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
+                      >
+                        {savingSubject ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={cancelEditSubject}
+                        className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Chapters (expanded) */}
               {expandedSubject === subject.id && (
@@ -333,19 +465,69 @@ export default function ManageSubjects() {
                   ) : (
                     <div className="space-y-2">
                       {chapters[subject.id].map((ch) => (
-                        <div key={ch.id} className="flex items-center justify-between bg-white rounded-lg px-4 py-2.5 border border-gray-200">
-                          <div>
-                            <span className="text-sm font-medium text-gray-700">{ch.name}</span>
-                            <span className="text-xs text-gray-400 ml-2">({ch.code})</span>
-                            <span className="text-xs text-gray-400 ml-2">{ch.question_count || 0} questions</span>
+                        <div key={ch.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2.5">
+                            <div>
+                              <span className="text-sm font-medium text-gray-700">{ch.name}</span>
+                              <span className="text-xs text-gray-400 ml-2">({ch.code})</span>
+                              <span className="text-xs text-gray-400 ml-2">{ch.question_count || 0} questions</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => startEditChapter(ch)}
+                                className="text-indigo-600 hover:text-indigo-800 text-xs font-medium"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteChapter(subject.id, ch.id)}
+                                disabled={deleting === `chapter-${ch.id}`}
+                                className="text-red-500 hover:text-red-700 text-xs font-medium"
+                              >
+                                {deleting === `chapter-${ch.id}` ? 'Deleting...' : 'Delete'}
+                              </button>
+                            </div>
                           </div>
-                          <button
-                            onClick={() => handleDeleteChapter(subject.id, ch.id)}
-                            disabled={deleting === `chapter-${ch.id}`}
-                            className="text-red-500 hover:text-red-700 text-xs font-medium"
-                          >
-                            {deleting === `chapter-${ch.id}` ? 'Deleting...' : 'Delete'}
-                          </button>
+                          {/* Inline Edit Chapter Form */}
+                          {editingChapterId === ch.id && (
+                            <div className="border-t border-gray-100 bg-indigo-50/30 px-4 py-3">
+                              <div className="flex flex-wrap items-end gap-3">
+                                <div className="flex-1 min-w-[140px]">
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                                  <input
+                                    value={editChapterForm.name}
+                                    onChange={(e) => setEditChapterForm({ ...editChapterForm, name: e.target.value })}
+                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                                    placeholder="Chapter name"
+                                  />
+                                </div>
+                                <div className="flex-1 min-w-[100px]">
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Code</label>
+                                  <input
+                                    value={editChapterForm.code}
+                                    onChange={(e) => setEditChapterForm({ ...editChapterForm, code: e.target.value.toUpperCase() })}
+                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                                    placeholder="Code"
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => handleSaveChapter(subject.id, ch.id)}
+                                    disabled={savingChapter}
+                                    className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
+                                  >
+                                    {savingChapter ? 'Saving...' : 'Save'}
+                                  </button>
+                                  <button
+                                    onClick={cancelEditChapter}
+                                    className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-200 transition"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

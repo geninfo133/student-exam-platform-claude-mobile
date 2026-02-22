@@ -1,8 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ManageAssignments() {
+  const { user } = useAuth();
+  const classFrom = user?.class_from || 1;
+  const classTo = user?.class_to || 12;
+  const classRange = Array.from({ length: classTo - classFrom + 1 }, (_, i) => classFrom + i);
   const [assignments, setAssignments] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
@@ -165,7 +170,7 @@ export default function ManageAssignments() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
+      <div className="bg-gradient-to-r from-gray-900 to-indigo-600 rounded-2xl p-8 text-white mb-8">
         <div className="flex items-center gap-3 mb-2">
           <Link to="/school/dashboard" className="hover:text-indigo-200 transition">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -302,7 +307,7 @@ export default function ManageAssignments() {
               className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
             >
               <option value="">--</option>
-              {[1,2,3,4,5,6,7,8,9,10].map((g) => (
+              {classRange.map((g) => (
                 <option key={g} value={String(g)}>Class {g}</option>
               ))}
             </select>

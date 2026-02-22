@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
 
 const initialForm = {
   username: '',
@@ -15,6 +16,12 @@ const initialForm = {
 };
 
 export default function ManageStudents() {
+  const { user } = useAuth();
+  const isCoaching = user?.org_type === 'coaching';
+  const classFrom = user?.class_from || 1;
+  const classTo = user?.class_to || 12;
+  const classRange = Array.from({ length: classTo - classFrom + 1 }, (_, i) => classFrom + i);
+
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -29,6 +36,9 @@ export default function ManageStudents() {
   const [searchName, setSearchName] = useState('');
   const [filterGrade, setFilterGrade] = useState('');
   const [filterSection, setFilterSection] = useState('');
+  const [coachingChapters, setCoachingChapters] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   const fetchStudents = async (pageNum) => {
     setLoading(true);
@@ -52,6 +62,21 @@ export default function ManageStudents() {
   useEffect(() => {
     api.get('/api/site-images/').then(res => setBgImages(res.data)).catch(() => {});
     fetchStudents(page);
+    if (isCoaching) {
+      // Fetch all subjects, then fetch chapters for each
+      api.get('/api/subjects/').then(async (res) => {
+        const subs = res.data.results || res.data;
+        let allChapters = [];
+        for (const s of subs) {
+          try {
+            const chRes = await api.get('/api/chapters/', { params: { subject: s.id } });
+            const chs = (chRes.data.results || chRes.data).map(ch => ({ ...ch, subject_name: s.name }));
+            allChapters = [...allChapters, ...chs];
+          } catch {}
+        }
+        setCoachingChapters(allChapters);
+      }).catch(() => {});
+    }
   }, [page]);
 
   const showMessage = (text, type = 'success') => {
@@ -101,6 +126,46 @@ export default function ManageStudents() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleEditClick = (student) => {
+    setEditingId(student.id);
+    setEditForm({
+      first_name: student.first_name || '',
+      last_name: student.last_name || '',
+      email: student.email || '',
+      phone_number: student.phone_number || '',
+      grade: student.grade || '',
+      section: student.section || '',
+    });
+  };
+
+  const handleEditChange = (e) => {
+    setEditForm({ ...editForm, [e.target.name]: e.target.value });
+  };
+
+  const handleEditSave = async () => {
+    try {
+      await api.patch(`/api/auth/members/${editingId}/update/`, editForm);
+      showMessage('Student updated successfully!');
+      setEditingId(null);
+      setEditForm({});
+      fetchStudents(page);
+    } catch (err) {
+      const detail = err.response?.data;
+      let errorMsg = 'Failed to update student.';
+      if (detail && typeof detail === 'object') {
+        const firstKey = Object.keys(detail)[0];
+        const val = detail[firstKey];
+        errorMsg = Array.isArray(val) ? val[0] : String(val);
+      }
+      showMessage(errorMsg, 'error');
+    }
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Header with Background Image */}
@@ -108,10 +173,10 @@ export default function ManageStudents() {
         className="rounded-2xl p-8 md:p-10 text-white mb-8 bg-cover bg-center relative overflow-hidden"
         style={bgImages.manage_students?.url ? { backgroundImage: `url(${bgImages.manage_students.url})` } : {}}
       >
-        <div className={`absolute inset-0 ${bgImages.manage_students?.url ? 'bg-black/50' : 'bg-gradient-to-r from-indigo-600 to-purple-600'}`}></div>
+        <div className={`absolute inset-0 ${bgImages.manage_students?.url ? 'bg-black/50' : 'bg-gradient-to-r from-gray-900 to-indigo-600'}`}></div>
         <div className="relative z-10">
           <h1 className="text-2xl md:text-3xl font-bold">Manage Students</h1>
-          <p className="mt-2 text-white/80">Add, view and manage student accounts for your school.</p>
+          <p className="mt-2 text-white/80">Add, view and manage student accounts for your {isCoaching ? 'coaching centre' : 'school'}.</p>
         </div>
       </div>
 
@@ -156,7 +221,7 @@ export default function ManageStudents() {
 
       {/* Search & Filter Bar */}
       <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className={`grid grid-cols-1 gap-3 ${isCoaching ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
           <input
             type="text"
             placeholder="Search by name..."
@@ -164,26 +229,41 @@ export default function ManageStudents() {
             onChange={(e) => setSearchName(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm"
           />
-          <select
-            value={filterGrade}
-            onChange={(e) => setFilterGrade(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm bg-white"
-          >
-            <option value="">All Classes</option>
-            {[1,2,3,4,5,6,7,8,9,10].map(g => (
-              <option key={g} value={String(g)}>Class {g}</option>
-            ))}
-          </select>
-          <select
-            value={filterSection}
-            onChange={(e) => setFilterSection(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm bg-white"
-          >
-            <option value="">All Sections</option>
-            {['A','B','C','D','E'].map(s => (
-              <option key={s} value={s}>Section {s}</option>
-            ))}
-          </select>
+          {isCoaching ? (
+            <select
+              value={filterGrade}
+              onChange={(e) => setFilterGrade(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm bg-white"
+            >
+              <option value="">All Exam Types</option>
+              {coachingChapters.map(ch => (
+                <option key={ch.id} value={ch.name}>{ch.name}</option>
+              ))}
+            </select>
+          ) : (
+            <>
+              <select
+                value={filterGrade}
+                onChange={(e) => setFilterGrade(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm bg-white"
+              >
+                <option value="">All Classes</option>
+                {classRange.map(g => (
+                  <option key={g} value={String(g)}>Class {g}</option>
+                ))}
+              </select>
+              <select
+                value={filterSection}
+                onChange={(e) => setFilterSection(e.target.value)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-sm bg-white"
+              >
+                <option value="">All Sections</option>
+                {['A','B','C','D','E'].map(s => (
+                  <option key={s} value={s}>Section {s}</option>
+                ))}
+              </select>
+            </>
+          )}
           {(searchName || filterGrade || filterSection) && (
             <button
               onClick={() => { setSearchName(''); setFilterGrade(''); setFilterSection(''); }}
@@ -229,14 +309,13 @@ export default function ManageStudents() {
             {/* Row 2: Username + Email */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   name="username"
                   value={formData.username}
                   onChange={handleChange}
-                  required
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  placeholder="Enter username"
+                  placeholder="Auto-generated if left blank"
                 />
               </div>
               <div>
@@ -297,49 +376,79 @@ export default function ManageStudents() {
               </div>
             </div>
 
-            {/* Row 4: Grade + Section */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
-                <select
-                  name="grade"
-                  value={formData.grade}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
-                >
-                  <option value="">Select Class</option>
-                  {[1,2,3,4,5,6,7,8,9,10].map(g => (
-                    <option key={g} value={String(g)}>Class {g}</option>
-                  ))}
-                </select>
+            {/* Row 4: Grade + Section (schools) or Exam Type (coaching) */}
+            {isCoaching ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Exam Type *</label>
+                  <select
+                    name="grade"
+                    value={formData.grade}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
+                  >
+                    <option value="">Select Exam Type</option>
+                    {coachingChapters.map(ch => (
+                      <option key={ch.id} value={ch.name}>{ch.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
+                  <input
+                    name="student_id"
+                    value={formData.student_id}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                    placeholder="Enter student ID"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Section *</label>
-                <select
-                  name="section"
-                  value={formData.section}
-                  onChange={handleChange}
-                  required
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
-                >
-                  <option value="">Select Section</option>
-                  {['A','B','C','D','E'].map(s => (
-                    <option key={s} value={s}>Section {s}</option>
-                  ))}
-                </select>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
+                  <select
+                    name="grade"
+                    value={formData.grade}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
+                  >
+                    <option value="">Select Class</option>
+                    {classRange.map(g => (
+                      <option key={g} value={String(g)}>Class {g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Section *</label>
+                  <select
+                    name="section"
+                    value={formData.section}
+                    onChange={handleChange}
+                    required
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
+                  >
+                    <option value="">Select Section</option>
+                    {['A','B','C','D','E'].map(s => (
+                      <option key={s} value={s}>Section {s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
+                  <input
+                    name="student_id"
+                    value={formData.student_id}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                    placeholder="Enter student ID"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label>
-                <input
-                  name="student_id"
-                  value={formData.student_id}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  placeholder="Enter student ID"
-                />
-              </div>
-            </div>
+            )}
 
             {/* Row 5: Parent Phone (alone) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -413,56 +522,182 @@ export default function ManageStudents() {
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">#</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Name</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Username</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Class</th>
+                    <th className="text-left px-4 py-3 font-semibold text-gray-600">{isCoaching ? 'Exam Type' : 'Class'}</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Student ID</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Email</th>
                     <th className="text-left px-4 py-3 font-semibold text-gray-600">Phone</th>
-                    <th className="text-left px-4 py-3 font-semibold text-gray-600">Assigned Teachers</th>
+                    {!isCoaching && <th className="text-left px-4 py-3 font-semibold text-gray-600">Assigned Teachers</th>}
                     <th className="text-right px-4 py-3 font-semibold text-gray-600">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filtered.map((student, index) => (
-                    <tr key={student.id} className="hover:bg-gray-50 transition">
-                      <td className="px-4 py-3 text-gray-500">{index + 1}</td>
-                      <td className="px-4 py-3 font-medium text-gray-800">
-                        {student.first_name} {student.last_name}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">@{student.username}</td>
-                      <td className="px-4 py-3">
-                        {student.grade ? (
-                          <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
-                            {student.grade}{student.section || ''}
-                          </span>
-                        ) : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">{student.student_id || '-'}</td>
-                      <td className="px-4 py-3 text-gray-500">{student.email || '-'}</td>
-                      <td className="px-4 py-3 text-gray-500">{student.phone_number || '-'}</td>
-                      <td className="px-4 py-3">
-                        {student.assigned_teachers && student.assigned_teachers.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {student.assigned_teachers.map((at, idx) => (
-                              <span key={idx} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
-                                {at.teacher_name} - {at.subject_name}
-                              </span>
-                            ))}
+                  {filtered.map((student, index) =>
+                    editingId === student.id ? (
+                      <tr key={student.id} className="bg-indigo-50/40">
+                        <td className="px-4 py-2 text-gray-500">{index + 1}</td>
+                        <td className="px-4 py-2" colSpan={1}>
+                          <div className="flex gap-1">
+                            <input
+                              name="first_name"
+                              value={editForm.first_name}
+                              onChange={handleEditChange}
+                              placeholder="First"
+                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                            />
+                            <input
+                              name="last_name"
+                              value={editForm.last_name}
+                              onChange={handleEditChange}
+                              placeholder="Last"
+                              className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                            />
                           </div>
-                        ) : (
-                          <span className="text-gray-400">-</span>
+                        </td>
+                        <td className="px-4 py-2 text-gray-500">@{student.username}</td>
+                        <td className="px-4 py-2">
+                          {isCoaching ? (
+                            <select
+                              name="grade"
+                              value={editForm.grade}
+                              onChange={handleEditChange}
+                              className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                            >
+                              <option value="">Select</option>
+                              {coachingChapters.map(ch => (
+                                <option key={ch.id} value={ch.name}>{ch.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="flex gap-1">
+                              <select
+                                name="grade"
+                                value={editForm.grade}
+                                onChange={handleEditChange}
+                                className="w-16 px-1 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                              >
+                                <option value="">--</option>
+                                {classRange.map(g => (
+                                  <option key={g} value={String(g)}>{g}</option>
+                                ))}
+                              </select>
+                              <select
+                                name="section"
+                                value={editForm.section}
+                                onChange={handleEditChange}
+                                className="w-14 px-1 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white"
+                              >
+                                <option value="">--</option>
+                                {['A','B','C','D','E'].map(s => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-gray-500">{student.student_id || '-'}</td>
+                        <td className="px-4 py-2">
+                          <input
+                            name="email"
+                            type="email"
+                            value={editForm.email}
+                            onChange={handleEditChange}
+                            placeholder="Email"
+                            className="w-36 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <input
+                            name="phone_number"
+                            value={editForm.phone_number}
+                            onChange={handleEditChange}
+                            placeholder="Phone"
+                            className="w-28 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                          />
+                        </td>
+                        {!isCoaching && (
+                          <td className="px-4 py-2">
+                            {student.assigned_teachers && student.assigned_teachers.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {student.assigned_teachers.map((at, idx) => (
+                                  <span key={idx} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                                    {at.teacher_name} - {at.subject_name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleDelete(student.id)}
-                          disabled={deleting === student.id}
-                          className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
-                        >
-                          {deleting === student.id ? 'Removing...' : 'Remove'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-4 py-2 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={handleEditSave}
+                              className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={handleEditCancel}
+                              className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr key={student.id} className="hover:bg-gray-50 transition">
+                        <td className="px-4 py-3 text-gray-500">{index + 1}</td>
+                        <td className="px-4 py-3 font-medium text-gray-800">
+                          {student.first_name} {student.last_name}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">@{student.username}</td>
+                        <td className="px-4 py-3">
+                          {student.grade ? (
+                            <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">
+                              {isCoaching ? student.grade : `${student.grade}${student.section || ''}`}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500">{student.student_id || '-'}</td>
+                        <td className="px-4 py-3 text-gray-500">{student.email || '-'}</td>
+                        <td className="px-4 py-3 text-gray-500">{student.phone_number || '-'}</td>
+                        {!isCoaching && (
+                          <td className="px-4 py-3">
+                            {student.assigned_teachers && student.assigned_teachers.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {student.assigned_teachers.map((at, idx) => (
+                                  <span key={idx} className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">
+                                    {at.teacher_name} - {at.subject_name}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                        )}
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() => handleEditClick(student)}
+                              className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(student.id)}
+                              disabled={deleting === student.id}
+                              className="text-red-600 hover:text-red-800 text-sm font-medium disabled:opacity-50"
+                            >
+                              {deleting === student.id ? 'Removing...' : 'Remove'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             </div>

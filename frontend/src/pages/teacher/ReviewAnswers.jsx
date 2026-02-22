@@ -131,7 +131,7 @@ export default function ReviewAnswers() {
       </div>
 
       {/* Summary Card */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white mb-8">
+      <div className="bg-gradient-to-r from-gray-900 to-indigo-600 rounded-2xl p-6 text-white mb-8">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
             <p className="text-2xl font-bold">{exam.score ?? '-'}</p>

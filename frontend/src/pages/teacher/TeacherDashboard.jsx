@@ -42,7 +42,7 @@ export default function TeacherDashboard() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       {/* Welcome Banner */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-8 text-white mb-8">
+      <div className="bg-gradient-to-r from-gray-900 to-indigo-600 rounded-2xl p-8 text-white mb-8">
         <div className="flex items-center gap-4 mb-4">
           {user?.profile_photo ? (
             <img src={user.profile_photo} alt="Profile" className="w-16 h-16 rounded-full object-cover border-2 border-white/50 shrink-0" />
@@ -63,7 +63,7 @@ export default function TeacherDashboard() {
             Upload Paper
           </Link>
           <Link to="/teacher/generate-paper" className="bg-indigo-500 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-400 transition border border-indigo-400 text-sm">
-            Generate Paper
+            Generate Questions
           </Link>
           <Link to="/teacher/create-exam" className="bg-purple-500 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-purple-400 transition border border-purple-400 text-sm">
             Create Exam

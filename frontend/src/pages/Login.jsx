@@ -166,13 +166,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full text-white py-3 rounded-lg font-medium transition disabled:opacity-50 ${
-                selectedRole === 'school'
-                  ? 'bg-indigo-600 hover:bg-indigo-700'
-                  : selectedRole === 'teacher'
-                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                  : 'bg-purple-600 hover:bg-purple-700'
-              }`}
+              className="w-full text-white py-3 rounded-lg font-medium transition disabled:opacity-50 bg-gray-900 hover:bg-gray-800"
             >
               {loading ? 'Signing in...' : `Sign In as ${activeRole.label}`}
             </button>

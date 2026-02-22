@@ -72,7 +72,7 @@ export default function TeacherAnalytics() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-8">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white">
+      <div className="bg-gradient-to-r from-gray-900 to-indigo-600 rounded-2xl p-6 text-white">
         <h1 className="text-2xl font-bold mb-4">Analytics Dashboard</h1>
         <div className="flex flex-wrap items-center gap-4">
           {/* Period selector */}

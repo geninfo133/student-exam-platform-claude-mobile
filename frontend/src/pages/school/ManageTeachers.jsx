@@ -22,6 +22,9 @@ export default function ManageTeachers() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [deleting, setDeleting] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '', phone_number: '' });
+  const [saving, setSaving] = useState(false);
   const [bgImages, setBgImages] = useState({});
 
   const fetchTeachers = async (pageNum) => {
@@ -114,6 +117,46 @@ export default function ManageTeachers() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const startEditing = (teacher) => {
+    setEditingId(teacher.id);
+    setEditForm({
+      first_name: teacher.first_name || '',
+      last_name: teacher.last_name || '',
+      email: teacher.email || '',
+      phone_number: teacher.phone_number || '',
+    });
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditForm({ first_name: '', last_name: '', email: '', phone_number: '' });
+  };
+
+  const handleEditChange = (e) => {
+    setEditForm({ ...editForm, [e.target.name]: e.target.value });
+  };
+
+  const handleEditSave = async (id) => {
+    setSaving(true);
+    try {
+      await api.patch(`/api/auth/members/${id}/update/`, editForm);
+      showMessage('Teacher updated successfully!');
+      cancelEditing();
+      fetchTeachers(page);
+    } catch (err) {
+      const detail = err.response?.data;
+      let errorMsg = 'Failed to update teacher.';
+      if (detail && typeof detail === 'object') {
+        const firstKey = Object.keys(detail)[0];
+        const val = detail[firstKey];
+        errorMsg = Array.isArray(val) ? val[0] : String(val);
+      }
+      showMessage(errorMsg, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Header with Background Image */}
@@ -121,7 +164,7 @@ export default function ManageTeachers() {
         className="rounded-2xl p-8 md:p-10 text-white mb-8 bg-cover bg-center relative overflow-hidden"
         style={bgImages.manage_teachers?.url ? { backgroundImage: `url(${bgImages.manage_teachers.url})` } : {}}
       >
-        <div className={`absolute inset-0 ${bgImages.manage_teachers?.url ? 'bg-black/50' : 'bg-gradient-to-r from-indigo-600 to-purple-600'}`}></div>
+        <div className={`absolute inset-0 ${bgImages.manage_teachers?.url ? 'bg-black/50' : 'bg-gradient-to-r from-gray-900 to-indigo-600'}`}></div>
         <div className="relative z-10">
           <h1 className="text-2xl md:text-3xl font-bold">Manage Teachers</h1>
           <p className="mt-2 text-white/80">Add, view and manage teacher accounts for your school.</p>
@@ -201,14 +244,13 @@ export default function ManageTeachers() {
             {/* Row 2: Username + Email */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Username <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   name="username"
                   value={formData.username}
                   onChange={handleChange}
-                  required
                   className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  placeholder="Enter username"
+                  placeholder="Auto-generated if left blank"
                 />
               </div>
               <div>
@@ -316,46 +358,122 @@ export default function ManageTeachers() {
           <div className="space-y-3">
             {teachers.map((teacher) => (
               <div key={teacher.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-lg">
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-gray-800">
-                        {teacher.first_name} {teacher.last_name}
-                      </h3>
-                      <p className="text-sm text-gray-500">@{teacher.username}</p>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
-                        {teacher.email && (
-                          <p className="text-xs text-gray-400">{teacher.email}</p>
-                        )}
-                        {teacher.phone_number && (
-                          <p className="text-xs text-gray-400">{teacher.phone_number}</p>
-                        )}
+                {editingId === teacher.id ? (
+                  /* Inline Edit Form */
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">First Name</label>
+                        <input
+                          name="first_name"
+                          value={editForm.first_name}
+                          onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
+                          placeholder="First name"
+                        />
                       </div>
-                      {/* Show assigned subjects */}
-                      {teacher.assigned_teachers && teacher.assigned_teachers.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-2">
-                          {teacher.assigned_teachers.map((at, idx) => (
-                            <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                              {at.subject_name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Last Name</label>
+                        <input
+                          name="last_name"
+                          value={editForm.last_name}
+                          onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
+                          placeholder="Last name"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                        <input
+                          name="email"
+                          type="email"
+                          value={editForm.email}
+                          onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
+                          placeholder="Email"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
+                        <input
+                          name="phone_number"
+                          value={editForm.phone_number}
+                          onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
+                          placeholder="Phone number"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => handleEditSave(teacher.id)}
+                        disabled={saving}
+                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50"
+                      >
+                        {saving ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        onClick={cancelEditing}
+                        disabled={saving}
+                        className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(teacher.id)}
-                    disabled={deleting === teacher.id}
-                    className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition disabled:opacity-50 self-start md:self-center"
-                  >
-                    {deleting === teacher.id ? 'Removing...' : 'Remove'}
-                  </button>
-                </div>
+                ) : (
+                  /* View Mode */
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div className="flex items-center gap-4">
+                      <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-lg">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-gray-800">
+                          {teacher.first_name} {teacher.last_name}
+                        </h3>
+                        <p className="text-sm text-gray-500">@{teacher.username}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+                          {teacher.email && (
+                            <p className="text-xs text-gray-400">{teacher.email}</p>
+                          )}
+                          {teacher.phone_number && (
+                            <p className="text-xs text-gray-400">{teacher.phone_number}</p>
+                          )}
+                        </div>
+                        {/* Show assigned subjects */}
+                        {teacher.assigned_teachers && teacher.assigned_teachers.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {teacher.assigned_teachers.map((at, idx) => (
+                              <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                {at.subject_name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 self-start md:self-center">
+                      <button
+                        onClick={() => startEditing(teacher)}
+                        className="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(teacher.id)}
+                        disabled={deleting === teacher.id}
+                        className="bg-red-50 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100 transition disabled:opacity-50"
+                      >
+                        {deleting === teacher.id ? 'Removing...' : 'Remove'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

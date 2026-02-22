@@ -94,7 +94,7 @@ export default function SchoolDashboard() {
         className="rounded-2xl p-8 md:p-10 text-white mb-8 bg-cover bg-center relative overflow-hidden"
         style={bgImages.school_dashboard?.url ? { backgroundImage: `url(${bgImages.school_dashboard.url})` } : {}}
       >
-        <div className={`absolute inset-0 ${bgImages.school_dashboard?.url ? 'bg-black/50' : 'bg-gradient-to-r from-indigo-600 to-purple-600'}`}></div>
+        <div className={`absolute inset-0 ${bgImages.school_dashboard?.url ? 'bg-black/50' : 'bg-gradient-to-r from-gray-900 to-indigo-600'}`}></div>
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-4">
             {user?.profile_photo ? (

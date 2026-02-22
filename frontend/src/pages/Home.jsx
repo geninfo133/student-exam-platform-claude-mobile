@@ -46,7 +46,7 @@ export default function Home() {
           <h1 className="text-3xl font-bold text-gray-800 mb-4">Welcome back!</h1>
           <Link
             to="/dashboard"
-            className="inline-block bg-indigo-600 text-white px-10 py-4 rounded-xl font-semibold text-lg hover:bg-indigo-700 transition"
+            className="inline-block bg-gray-900 text-white px-10 py-4 rounded-xl font-semibold text-lg hover:bg-gray-800 transition"
           >
             Go to Dashboard
           </Link>
@@ -72,9 +72,9 @@ export default function Home() {
               <button
                 key={org.key}
                 onClick={() => setSelected(org.key)}
-                className="bg-white rounded-2xl shadow-md hover:shadow-xl hover:scale-[1.03] transition-all p-8 flex flex-col items-center text-center cursor-pointer border-2 border-transparent hover:border-indigo-500"
+                className="bg-white rounded-2xl shadow-md hover:shadow-xl hover:scale-[1.03] transition-all p-8 flex flex-col items-center text-center cursor-pointer border-2 border-transparent hover:border-gray-700"
               >
-                <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4">
+                <div className="w-16 h-16 bg-gray-100 text-gray-700 rounded-full flex items-center justify-center mb-4">
                   {org.icon}
                 </div>
                 <h3 className="text-xl font-bold text-gray-800 mb-1">{org.title}</h3>
@@ -87,13 +87,13 @@ export default function Home() {
           <div className="flex flex-col items-center gap-4 max-w-xs mx-auto">
             <Link
               to={`/login?org_type=${selected}`}
-              className="w-full py-3 border-2 border-indigo-600 text-indigo-600 rounded-lg font-semibold hover:bg-indigo-50 transition text-center"
+              className="w-full py-3 border-2 border-gray-900 text-gray-900 rounded-lg font-semibold hover:bg-gray-100 transition text-center"
             >
               Login
             </Link>
             <Link
               to={`/register?org_type=${selected}`}
-              className="w-full py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition text-center"
+              className="w-full py-3 bg-gray-900 text-white rounded-lg font-semibold hover:bg-gray-800 transition text-center"
             >
               Register
             </Link>
