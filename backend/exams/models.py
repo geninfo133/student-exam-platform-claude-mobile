@@ -21,20 +21,26 @@ class ExamType(models.Model):
 class Subject(models.Model):
     """Subjects for each exam type"""
     exam_type = models.ForeignKey(ExamType, on_delete=models.CASCADE, related_name='subjects')
+    school = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.CASCADE, related_name='school_subjects',
+        help_text='School/org that owns this subject (null = global/shared)',
+    )
     name = models.CharField(max_length=100)
     code = models.CharField(max_length=20)
     description = models.TextField(blank=True)
+    grade = models.CharField(max_length=5, blank=True, default='', help_text='Class/grade this subject belongs to (e.g. 10)')
     duration_minutes = models.IntegerField(default=90)
     total_marks = models.IntegerField(default=50)
     is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"{self.exam_type.name} - {self.name}"
+        return f"{self.exam_type.name} - {self.name}" + (f" (Class {self.grade})" if self.grade else "")
 
     class Meta:
         db_table = 'subjects'
-        unique_together = ['exam_type', 'code']
-        ordering = ['exam_type', 'name']
+        unique_together = ['exam_type', 'code', 'school']
+        ordering = ['grade', 'name']
 
 
 class Chapter(models.Model):
@@ -270,20 +276,24 @@ class TeacherAssignment(models.Model):
         related_name='teaching_assignments',
     )
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
-    grade = models.CharField(max_length=2, default='10')
-    section = models.CharField(max_length=1, default='A')
+    grade = models.CharField(max_length=2, default='', blank=True)
+    section = models.CharField(max_length=1, default='', blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.teacher.get_full_name()} - {self.subject.name} (Class {self.grade}{self.section})"
+        if self.grade and self.grade != '-':
+            return f"{self.teacher.get_full_name()} - {self.subject.name} (Class {self.grade}{self.section})"
+        return f"{self.teacher.get_full_name()} - {self.subject.name} (All Students)"
 
     def get_students(self):
         from django.contrib.auth import get_user_model
         User = get_user_model()
-        return User.objects.filter(
-            school=self.school, role='student',
-            grade=self.grade, section=self.section, is_active=True,
-        )
+        filters = dict(school=self.school, role='student', is_active=True)
+        if self.grade and self.grade != '-':
+            filters['grade'] = self.grade
+        if self.section and self.section != '-':
+            filters['section'] = self.section
+        return User.objects.filter(**filters)
 
     class Meta:
         db_table = 'teacher_assignments'
@@ -336,6 +346,11 @@ class HandwrittenExam(models.Model):
 
 class AssignedExam(models.Model):
     """Teacher-assigned exams to students"""
+    SELECTION_MODE_CHOICES = [
+        ('random', 'Random from Question Bank'),
+        ('manual', 'Manually Selected'),
+    ]
+
     school = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
         related_name='assigned_exams_school',
@@ -347,7 +362,11 @@ class AssignedExam(models.Model):
     title = models.CharField(max_length=300)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
     chapters = models.ManyToManyField(Chapter, blank=True)
-    num_questions = models.IntegerField(default=29)  # 20 MCQ + 5 SHORT + 4 LONG
+    selection_mode = models.CharField(max_length=10, choices=SELECTION_MODE_CHOICES, default='random')
+    selected_questions = models.ManyToManyField('Question', blank=True, related_name='assigned_exams')
+    num_mcq = models.IntegerField(default=20)
+    num_short = models.IntegerField(default=5)
+    num_long = models.IntegerField(default=4)
     total_marks = models.IntegerField(default=50)
     duration_minutes = models.IntegerField(default=90)
     assigned_to = models.ManyToManyField(

@@ -5,6 +5,11 @@ export function useTimer(totalSeconds, onExpire) {
   const onExpireRef = useRef(onExpire);
   onExpireRef.current = onExpire;
 
+  // Reset timer when totalSeconds changes (e.g. when exam data loads)
+  useEffect(() => {
+    setTimeLeft(totalSeconds);
+  }, [totalSeconds]);
+
   useEffect(() => {
     if (timeLeft <= 0) {
       onExpireRef.current?.();

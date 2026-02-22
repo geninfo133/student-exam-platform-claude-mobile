@@ -16,6 +16,7 @@ export default function ExamResults() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [gradingIds, setGradingIds] = useState(new Set());
+  const [deletingExamId, setDeletingExamId] = useState(null);
 
   const fetchExams = async (pageNum) => {
     try {
@@ -53,6 +54,22 @@ export default function ExamResults() {
     const interval = setInterval(fetchPending, 3000);
     return () => clearInterval(interval);
   }, [pending, fetchPending]);
+
+  const handleDeleteExam = async (e, examId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm('Delete this exam? All student submissions will also be removed.')) return;
+    setDeletingExamId(examId);
+    try {
+      await api.delete(`/api/exams/assigned/${examId}/`);
+      fetchExams(page);
+      fetchPending();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to delete exam');
+    } finally {
+      setDeletingExamId(null);
+    }
+  };
 
   const handleGrade = async (examId, includeAnalysis = false) => {
     setGradingIds((prev) => new Set(prev).add(examId));
@@ -176,13 +193,9 @@ export default function ExamResults() {
             <>
               <div className="space-y-4">
                 {exams.map((exam) => (
-                  <Link
-                    key={exam.id}
-                    to={`/teacher/review/${exam.id}`}
-                    className="block bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition border border-gray-100"
-                  >
+                  <div key={exam.id} className="bg-white rounded-xl p-5 shadow-sm hover:shadow-md transition border border-gray-100">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                      <div className="flex-1">
+                      <Link to={`/teacher/review/${exam.id}`} className="flex-1 min-w-0">
                         <h3 className="font-semibold text-gray-800 mb-1">{exam.title}</h3>
                         <p className="text-sm text-gray-500">{exam.subject_name}</p>
                         <p className="text-xs text-gray-400 mt-1">
@@ -190,7 +203,7 @@ export default function ExamResults() {
                             day: 'numeric', month: 'short', year: 'numeric',
                           })}
                         </p>
-                      </div>
+                      </Link>
                       <div className="flex items-center gap-6">
                         <div className="text-center">
                           <p className="text-lg font-bold text-indigo-600">{exam.student_count}</p>
@@ -206,12 +219,28 @@ export default function ExamResults() {
                           </p>
                           <p className="text-xs text-gray-500">Completed</p>
                         </div>
-                        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
+                        <button
+                          onClick={(e) => handleDeleteExam(e, exam.id)}
+                          disabled={deletingExamId === exam.id}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition disabled:opacity-50"
+                          title="Delete exam"
+                        >
+                          {deletingExamId === exam.id ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-red-600"></div>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          )}
+                        </button>
+                        <Link to={`/teacher/review/${exam.id}`}>
+                          <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </Link>
                       </div>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
 

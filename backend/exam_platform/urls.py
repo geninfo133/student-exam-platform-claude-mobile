@@ -11,19 +11,19 @@ from accounts.api_views import (
     RegisterView, ProfileView,
     SchoolCreateTeacherView, SchoolCreateStudentView,
     SchoolMembersListView, TeacherStudentListView,
-    DeleteMemberView, site_images_view,
+    UpdateMemberView, DeleteMemberView, site_images_view,
     site_image_upload_view, site_image_delete_view,
 )
 from exams.api_views import (
     ExamTypeListView, SubjectListView, ChapterListView,
-    SubjectCreateView, SubjectDeleteView,
-    ChapterCreateView, ChapterDeleteView,
+    SubjectCreateView, SubjectUpdateView, SubjectDeleteView,
+    ChapterCreateView, ChapterUpdateView, ChapterDeleteView,
     generate_exam, save_answer, submit_exam,
     grading_status, exam_result, ExamHistoryView,
-    ExamPaperUploadView, ExamPaperListView,
+    ExamPaperUploadView, ExamPaperListView, ExamPaperDeleteView,
     GenerateQuestionsFromPaperView, CreatePaperFromPapersView,
     GenerateFromInstructionsView,
-    AssignedExamCreateView, AssignedExamListView,
+    AssignedExamCreateView, AssignedExamListView, AssignedExamDeleteView,
     StudentAssignedExamsView, TeacherReviewView,
     TeacherDashboardStatsView, SchoolDashboardStatsView,
     TeacherAssignmentListView, TeacherAssignmentCreateView,
@@ -36,6 +36,7 @@ from exams.api_views import (
     GenerateExamAnalysisView,
     TeacherGradeExamView,
     PendingReviewListView,
+    TeacherQuestionListView,
 )
 
 urlpatterns = [
@@ -53,15 +54,18 @@ urlpatterns = [
     path('api/auth/members/', SchoolMembersListView.as_view(), name='api-members'),
     path('api/auth/my-students/', TeacherStudentListView.as_view(), name='api-my-students'),
     path('api/auth/members/<int:pk>/', DeleteMemberView.as_view(), name='api-delete-member'),
+    path('api/auth/members/<int:pk>/update/', UpdateMemberView.as_view(), name='api-update-member'),
 
     # Exam browsing & subject/chapter management
     path('api/exam-types/', ExamTypeListView.as_view(), name='api-exam-types'),
     path('api/subjects/', SubjectListView.as_view(), name='api-subjects'),
     path('api/subjects/create/', SubjectCreateView.as_view(), name='api-subject-create'),
     path('api/subjects/<int:pk>/', SubjectDeleteView.as_view(), name='api-subject-delete'),
+    path('api/subjects/<int:pk>/update/', SubjectUpdateView.as_view(), name='api-subject-update'),
     path('api/chapters/', ChapterListView.as_view(), name='api-chapters'),
     path('api/chapters/create/', ChapterCreateView.as_view(), name='api-chapter-create'),
     path('api/chapters/<int:pk>/', ChapterDeleteView.as_view(), name='api-chapter-delete'),
+    path('api/chapters/<int:pk>/update/', ChapterUpdateView.as_view(), name='api-chapter-update'),
 
     # Exam actions
     path('api/exams/generate/', generate_exam, name='api-generate-exam'),
@@ -75,12 +79,17 @@ urlpatterns = [
     path('api/exams/papers/upload/', ExamPaperUploadView.as_view(), name='api-paper-upload'),
     path('api/exams/papers/', ExamPaperListView.as_view(), name='api-paper-list'),
     path('api/exams/papers/<int:pk>/generate/', GenerateQuestionsFromPaperView.as_view(), name='api-paper-generate'),
+    path('api/exams/papers/<int:pk>/', ExamPaperDeleteView.as_view(), name='api-paper-delete'),
     path('api/exams/papers/create-from-papers/', CreatePaperFromPapersView.as_view(), name='api-create-from-papers'),
     path('api/exams/generate-from-instructions/', GenerateFromInstructionsView.as_view(), name='api-generate-instructions'),
+
+    # Question browsing (for manual selection)
+    path('api/questions/', TeacherQuestionListView.as_view(), name='api-questions'),
 
     # Assigned exams
     path('api/exams/assigned/create/', AssignedExamCreateView.as_view(), name='api-assigned-create'),
     path('api/exams/assigned/', AssignedExamListView.as_view(), name='api-assigned-list'),
+    path('api/exams/assigned/<int:pk>/', AssignedExamDeleteView.as_view(), name='api-assigned-delete'),
     path('api/exams/assigned/my/', StudentAssignedExamsView.as_view(), name='api-assigned-my'),
 
     # Teacher review

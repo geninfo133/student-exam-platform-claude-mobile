@@ -10,22 +10,38 @@ class User(AbstractUser):
         ('student', 'Student'),
     ]
     BOARD_CHOICES = [
+        # School/College boards
         ('CBSE', 'CBSE'),
         ('STATE', 'State Board'),
         ('ICSE', 'ICSE'),
+        ('INTL', 'International'),
+        # Coaching exam types
+        ('BANK', 'Bank Exams'),
+        ('EAMCET', 'EAMCET'),
+        ('ECET', 'ECET'),
+        ('NEET', 'NEET'),
+        ('JEE', 'IIT-JEE'),
+        ('DSC', 'DSC'),
+        ('OTHER', 'Other'),
     ]
     GRADE_CHOICES = [
         ('1', 'Class 1'), ('2', 'Class 2'), ('3', 'Class 3'),
         ('4', 'Class 4'), ('5', 'Class 5'), ('6', 'Class 6'),
         ('7', 'Class 7'), ('8', 'Class 8'), ('9', 'Class 9'),
-        ('10', 'Class 10'),
+        ('10', 'Class 10'), ('11', 'Class 11'), ('12', 'Class 12'),
     ]
     SECTION_CHOICES = [
         ('A', 'Section A'), ('B', 'Section B'), ('C', 'Section C'),
         ('D', 'Section D'), ('E', 'Section E'),
     ]
+    ORG_TYPE_CHOICES = [
+        ('school', 'School'),
+        ('college', 'College'),
+        ('coaching', 'Coaching Centre'),
+    ]
 
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='student')
+    org_type = models.CharField(max_length=10, choices=ORG_TYPE_CHOICES, default='school', blank=True)
     school = models.ForeignKey(
         'self', null=True, blank=True,
         on_delete=models.PROTECT,
@@ -39,10 +55,12 @@ class User(AbstractUser):
     phone_number = models.CharField(max_length=15, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
     address = models.TextField(blank=True)
-    grade = models.CharField(max_length=2, choices=GRADE_CHOICES, default='10')
+    grade = models.CharField(max_length=50, choices=GRADE_CHOICES, default='10', blank=True)
     section = models.CharField(max_length=1, choices=SECTION_CHOICES, default='A', blank=True)
-    board = models.CharField(max_length=10, choices=BOARD_CHOICES, default='CBSE')
+    board = models.CharField(max_length=50, choices=BOARD_CHOICES, default='CBSE')
     school_name = models.CharField(max_length=200, blank=True)
+    class_from = models.PositiveIntegerField(default=1, help_text='Lowest class offered (e.g. 1)')
+    class_to = models.PositiveIntegerField(default=12, help_text='Highest class offered (e.g. 10)')
     parent_phone = models.CharField(max_length=15, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

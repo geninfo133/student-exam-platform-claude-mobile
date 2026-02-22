@@ -42,14 +42,17 @@ def _pick_questions(available, count, difficulty_mix=None):
     return selected[:count]
 
 
-def generate_paper(subject, chapter=None, school=None):
-    """Generate a balanced 50-mark paper.
+def generate_paper(subject, chapter=None, school=None, num_mcq=20, num_short=5, num_long=4):
+    """Generate an exam paper with configurable question counts.
 
     Args:
         subject: Subject instance
         chapter: Optional Chapter instance
         school: Optional school User instance. If provided, includes
                 school-specific questions + global questions.
+        num_mcq: Number of MCQ questions (default 20)
+        num_short: Number of short answer questions (default 5)
+        num_long: Number of long answer questions (default 4)
     """
     base_qs = Question.objects.filter(subject=subject, is_active=True)
     if chapter:
@@ -64,9 +67,9 @@ def generate_paper(subject, chapter=None, school=None):
     long_pool = list(base_qs.filter(question_type='LONG'))
 
     # Target counts
-    mcq_target = 20
-    short_target = 5
-    long_target = 4
+    mcq_target = num_mcq
+    short_target = num_short
+    long_target = num_long
 
     # If not enough questions of a type, adjust
     mcq_count = min(mcq_target, len(mcq_pool))

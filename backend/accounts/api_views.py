@@ -117,6 +117,24 @@ class TeacherStudentListView(generics.ListAPIView):
         ).order_by('first_name')
 
 
+class UpdateMemberView(generics.UpdateAPIView):
+    """School updates a teacher or student account."""
+    serializer_class = MemberListSerializer
+    permission_classes = [permissions.IsAuthenticated, IsSchoolUser]
+
+    def get_queryset(self):
+        return User.objects.filter(school=self.request.user)
+
+    def patch(self, request, *args, **kwargs):
+        member = self.get_object()
+        allowed = ['first_name', 'last_name', 'email', 'phone_number', 'grade', 'section', 'student_id', 'teacher_id']
+        for field in allowed:
+            if field in request.data:
+                setattr(member, field, request.data[field])
+        member.save()
+        return Response(MemberListSerializer(member).data)
+
+
 class DeleteMemberView(generics.DestroyAPIView):
     """School deletes a teacher or student account."""
     permission_classes = [permissions.IsAuthenticated, IsSchoolUser]

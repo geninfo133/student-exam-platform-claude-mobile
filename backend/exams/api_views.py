@@ -25,6 +25,7 @@ from .serializers import (
     UserAnswerReviewSerializer, CreatePaperFromPapersSerializer,
     TeacherAssignmentSerializer, TeacherAssignmentCreateSerializer,
     HandwrittenExamSerializer, HandwrittenExamUploadSerializer,
+    QuestionBrowseSerializer,
 )
 from .paper_generator import generate_paper
 from .grading import grade_exam_async
@@ -42,8 +43,13 @@ class ExamTypeListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return ExamType.objects.filter(is_active=True).annotate(
-            subject_count=Count('subjects')
+        user = self.request.user
+        school = user if user.role == 'school' else user.school
+        qs = ExamType.objects.filter(is_active=True)
+        if school:
+            qs = qs.filter(subjects__school=school).distinct()
+        return qs.annotate(
+            subject_count=Count('subjects', filter=Q(subjects__school=school) if school else Q())
         )
 
 
@@ -52,10 +58,15 @@ class SubjectListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
+        user = self.request.user
+        school = user if user.role == 'school' else user.school
         qs = Subject.objects.filter(is_active=True).annotate(
             chapter_count=Count('chapters'),
             question_count=Count('questions'),
         )
+        # Filter to this school's own subjects only
+        if school:
+            qs = qs.filter(school=school)
         exam_type = self.request.query_params.get('exam_type')
         if exam_type:
             qs = qs.filter(exam_type_id=exam_type)
@@ -87,31 +98,58 @@ class SubjectCreateView(APIView):
     def post(self, request):
         name = request.data.get('name', '').strip()
         code = request.data.get('code', '').strip().upper()
+        grade = request.data.get('grade', '').strip()
         if not name or not code:
             return Response({'error': 'Name and code are required'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Use school's board as exam type, or create one
         board = request.user.board or 'CBSE'
+        is_coaching = request.user.org_type == 'coaching'
+        if is_coaching:
+            et_code = board
+            et_name = dict(request.user.BOARD_CHOICES).get(board, board)
+        else:
+            et_code = f'{board}{grade}' if grade else f'{board}10'
+            et_name = f'{board} Class {grade}' if grade else f'{board} Class 10'
         exam_type, _ = ExamType.objects.get_or_create(
-            code=f'{board}10',
-            defaults={'name': f'{board} Class 10', 'is_active': True},
+            code=et_code,
+            defaults={'name': et_name, 'is_active': True},
         )
 
-        if Subject.objects.filter(exam_type=exam_type, code=code).exists():
+        if Subject.objects.filter(exam_type=exam_type, code=code, school=request.user).exists():
             return Response({'error': f'Subject with code {code} already exists'}, status=status.HTTP_400_BAD_REQUEST)
 
         subject = Subject.objects.create(
             exam_type=exam_type,
+            school=request.user,
             name=name,
             code=code,
+            grade=grade,
             description=request.data.get('description', ''),
             duration_minutes=int(request.data.get('duration_minutes', 90)),
             total_marks=int(request.data.get('total_marks', 50)),
         )
         return Response({
             'id': subject.id, 'name': subject.name, 'code': subject.code,
+            'grade': subject.grade,
             'message': 'Subject created successfully',
         }, status=status.HTTP_201_CREATED)
+
+
+class SubjectUpdateView(APIView):
+    """School updates a subject."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolUser]
+
+    def patch(self, request, pk):
+        try:
+            subject = Subject.objects.get(pk=pk, school=request.user)
+        except Subject.DoesNotExist:
+            return Response({'error': 'Subject not found'}, status=status.HTTP_404_NOT_FOUND)
+        for field in ('name', 'code', 'description', 'duration_minutes', 'total_marks'):
+            if field in request.data:
+                setattr(subject, field, request.data[field])
+        subject.save()
+        return Response({'id': subject.id, 'name': subject.name, 'message': 'Subject updated'})
 
 
 class SubjectDeleteView(APIView):
@@ -120,7 +158,7 @@ class SubjectDeleteView(APIView):
 
     def delete(self, request, pk):
         try:
-            subject = Subject.objects.get(pk=pk)
+            subject = Subject.objects.get(pk=pk, school=request.user)
         except Subject.DoesNotExist:
             return Response({'error': 'Subject not found'}, status=status.HTTP_404_NOT_FOUND)
         subject.delete()
@@ -158,6 +196,22 @@ class ChapterCreateView(APIView):
             'id': chapter.id, 'name': chapter.name, 'code': chapter.code,
             'message': 'Chapter created successfully',
         }, status=status.HTTP_201_CREATED)
+
+
+class ChapterUpdateView(APIView):
+    """School updates a chapter."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolUser]
+
+    def patch(self, request, pk):
+        try:
+            chapter = Chapter.objects.get(pk=pk)
+        except Chapter.DoesNotExist:
+            return Response({'error': 'Chapter not found'}, status=status.HTTP_404_NOT_FOUND)
+        for field in ('name', 'code', 'description'):
+            if field in request.data:
+                setattr(chapter, field, request.data[field])
+        chapter.save()
+        return Response({'id': chapter.id, 'name': chapter.name, 'message': 'Chapter updated'})
 
 
 class ChapterDeleteView(APIView):
@@ -222,16 +276,42 @@ def generate_exam(request):
     # Get school context for question filtering
     school = request.user.get_school_account() if hasattr(request.user, 'get_school_account') else None
 
-    # Generate paper
-    questions = generate_paper(subject, chapter, school=school)
+    # Check if assigned exam uses manual question selection
+    if assigned_exam and assigned_exam.selection_mode == 'manual' and assigned_exam.selected_questions.exists():
+        questions = list(assigned_exam.selected_questions.all())
+        for q in questions:
+            if q.question_type == 'MCQ':
+                q.marks = 1
+            elif q.question_type == 'SHORT':
+                q.marks = 2
+            else:
+                q.marks = 5
+    else:
+        # Get question counts from assigned exam or use defaults
+        num_mcq = assigned_exam.num_mcq if assigned_exam else 20
+        num_short = assigned_exam.num_short if assigned_exam else 5
+        num_long = assigned_exam.num_long if assigned_exam else 4
+
+        # Generate paper with configured question counts
+        questions = generate_paper(
+            subject, chapter, school=school,
+            num_mcq=num_mcq, num_short=num_short, num_long=num_long,
+        )
+
     if not questions:
         return Response(
             {'error': 'Not enough questions available to generate an exam'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Calculate total time
-    total_time = sum(q.time_per_question_seconds for q in questions)
+    # Use assigned exam duration if available, otherwise calculate from per-question time
+    if assigned_exam:
+        total_time = assigned_exam.duration_minutes * 60
+    else:
+        total_time = sum(q.time_per_question_seconds for q in questions)
+
+    # Calculate actual total marks from selected questions
+    total_marks = sum(q.marks for q in questions)
 
     # Create UserExam
     user_exam = UserExam.objects.create(
@@ -257,7 +337,7 @@ def generate_exam(request):
         'subject': subject.name,
         'chapter': chapter.name if chapter else None,
         'total_questions': len(questions),
-        'total_marks': 50,
+        'total_marks': total_marks,
         'total_time_seconds': total_time,
         'questions': question_data,
     }, status=status.HTTP_201_CREATED)
@@ -400,6 +480,20 @@ class ExamPaperListView(generics.ListAPIView):
         return ExamPaper.objects.filter(school=school)
 
 
+class ExamPaperDeleteView(generics.DestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def get_queryset(self):
+        user = self.request.user
+        school = user if user.role == 'school' else user.school
+        return ExamPaper.objects.filter(school=school)
+
+    def perform_destroy(self, instance):
+        if instance.file:
+            instance.file.delete(save=False)
+        instance.delete()
+
+
 class GenerateQuestionsFromPaperView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
 
@@ -443,25 +537,27 @@ class CreatePaperFromPapersView(APIView):
             return Response({'error': 'Subject not found'}, status=status.HTTP_404_NOT_FOUND)
 
         from .paper_processor import generate_paper_from_multiple
-        result = generate_paper_from_multiple(
-            paper_ids=serializer.validated_data['paper_ids'],
-            instructions=serializer.validated_data['instructions'],
-            subject=subject,
-            school=school,
-            teacher=user,
-            total_marks=serializer.validated_data.get('total_marks', 50),
-            num_mcq=serializer.validated_data.get('num_mcq', 20),
-            num_short=serializer.validated_data.get('num_short', 5),
-            num_long=serializer.validated_data.get('num_long', 4),
+        thread = threading.Thread(
+            target=generate_paper_from_multiple,
+            kwargs={
+                'paper_ids': serializer.validated_data['paper_ids'],
+                'instructions': serializer.validated_data['instructions'],
+                'subject': subject,
+                'school': school,
+                'teacher': user,
+                'total_marks': serializer.validated_data.get('total_marks', 50),
+                'num_mcq': serializer.validated_data.get('num_mcq', 20),
+                'num_short': serializer.validated_data.get('num_short', 5),
+                'num_long': serializer.validated_data.get('num_long', 4),
+            },
         )
+        thread.daemon = True
+        thread.start()
 
-        if result['success']:
-            return Response({
-                'message': f'Successfully generated {result["questions_count"]} questions',
-                'questions_count': result['questions_count'],
-            }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({
+            'message': 'Question generation from papers started',
+            'subject': subject.name,
+        }, status=status.HTTP_202_ACCEPTED)
 
 
 # ============================================================
@@ -525,6 +621,44 @@ class GenerateFromInstructionsView(APIView):
 
 
 # ============================================================
+# Question Browsing (Teacher selects questions for manual mode)
+# ============================================================
+
+class TeacherQuestionListView(generics.ListAPIView):
+    """Browse questions for manual selection when creating exams."""
+    serializer_class = QuestionBrowseSerializer
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def get_queryset(self):
+        user = self.request.user
+        school = user if user.role == 'school' else user.school
+
+        subject_id = self.request.query_params.get('subject')
+        if not subject_id:
+            return Question.objects.none()
+
+        qs = Question.objects.filter(
+            subject_id=subject_id, is_active=True,
+        ).filter(
+            Q(school=school) | Q(school__isnull=True)
+        ).select_related('chapter')
+
+        chapter = self.request.query_params.get('chapter')
+        if chapter:
+            qs = qs.filter(chapter_id=chapter)
+
+        question_type = self.request.query_params.get('question_type')
+        if question_type:
+            qs = qs.filter(question_type=question_type)
+
+        difficulty = self.request.query_params.get('difficulty')
+        if difficulty:
+            qs = qs.filter(difficulty=difficulty)
+
+        return qs
+
+
+# ============================================================
 # Assigned Exams (Teacher creates, Student takes)
 # ============================================================
 
@@ -543,6 +677,23 @@ class AssignedExamListView(generics.ListAPIView):
             return AssignedExam.objects.filter(school=user)
         # Teacher sees their own assigned exams
         return AssignedExam.objects.filter(teacher=user)
+
+
+class AssignedExamDeleteView(APIView):
+    """Teacher/school deletes an assigned exam."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def delete(self, request, pk):
+        user = request.user
+        try:
+            if user.role == 'school':
+                exam = AssignedExam.objects.get(pk=pk, school=user)
+            else:
+                exam = AssignedExam.objects.get(pk=pk, teacher=user)
+        except AssignedExam.DoesNotExist:
+            return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
+        exam.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class StudentAssignedExamsView(generics.ListAPIView):
@@ -665,8 +816,13 @@ class TeacherAssignmentCreateView(APIView):
         school = request.user
         teacher_id = serializer.validated_data['teacher_id']
         subject_id = serializer.validated_data['subject_id']
-        grade = serializer.validated_data['grade']
-        section = serializer.validated_data['section']
+        grade = serializer.validated_data.get('grade', '')
+        section = serializer.validated_data.get('section', '')
+
+        # Coaching centres don't use grade/section — default to '-' (all students)
+        if getattr(request.user, 'org_type', '') == 'coaching':
+            grade = grade or '-'
+            section = section or '-'
 
         # Validate teacher belongs to school
         try:

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../api/axios';
 
 export default function GeneratePaper() {
+  const [searchParams] = useSearchParams();
   // 'old_papers' or 'instructions'
   const [method, setMethod] = useState(null);
 
@@ -17,6 +18,8 @@ export default function GeneratePaper() {
 
   // Option 1 state (From Old Papers)
   const [paperFiles, setPaperFiles] = useState([]);
+  const [existingPapers, setExistingPapers] = useState([]);
+  const [selectedExistingPaperIds, setSelectedExistingPaperIds] = useState([]);
   const [paperForm, setPaperForm] = useState({
     subject: '',
     instructions: '',
@@ -37,12 +40,20 @@ export default function GeneratePaper() {
     num_long: 4,
   });
 
-  // Fetch teacher's assignments (subjects)
+  // Fetch subjects - from assignments for teachers, from subjects API for school admins
   useEffect(() => {
     const fetchAssignments = async () => {
       try {
-        const res = await api.get('/api/assignments/my/');
-        setAssignments(res.data.results || res.data);
+        const profileRes = await api.get('/api/auth/profile/');
+        const role = profileRes.data.role;
+        if (role === 'school') {
+          const res = await api.get('/api/subjects/');
+          const subs = res.data.results || res.data;
+          setAssignments(subs.map(s => ({ subject: s.id, subject_name: s.name })));
+        } else {
+          const res = await api.get('/api/assignments/my/');
+          setAssignments(res.data.results || res.data);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -52,11 +63,39 @@ export default function GeneratePaper() {
     fetchAssignments();
   }, []);
 
+  // Pre-select papers from query params (e.g. ?papers=1,2,3)
+  useEffect(() => {
+    const preSelected = searchParams.get('papers');
+    if (preSelected) {
+      const ids = preSelected.split(',').map(Number).filter(Boolean);
+      if (ids.length > 0) {
+        setMethod('old_papers');
+        setSelectedExistingPaperIds(ids);
+      }
+    }
+  }, [searchParams]);
+
   // Derive subjects from assignments
   const subjects = assignments.map((a) => ({
     id: a.subject,
     name: a.subject_name,
   }));
+
+  // Fetch existing uploaded papers when subject changes (for Option 1)
+  useEffect(() => {
+    if (!paperForm.subject) {
+      setExistingPapers([]);
+      setSelectedExistingPaperIds([]);
+      return;
+    }
+    api.get('/api/exams/papers/').then((res) => {
+      const papers = (res.data.results || res.data).filter(
+        (p) => String(p.subject) === String(paperForm.subject)
+      );
+      setExistingPapers(papers);
+      setSelectedExistingPaperIds([]);
+    }).catch(() => {});
+  }, [paperForm.subject]);
 
   // Fetch chapters when subject changes (for Option 2)
   useEffect(() => {
@@ -97,6 +136,12 @@ export default function GeneratePaper() {
     setPaperFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const toggleExistingPaper = (paperId) => {
+    setSelectedExistingPaperIds((prev) =>
+      prev.includes(paperId) ? prev.filter((id) => id !== paperId) : [...prev, paperId]
+    );
+  };
+
   // Instruction form handlers
   const handleInstructionChange = (e) => {
     const { name, value } = e.target;
@@ -128,8 +173,8 @@ export default function GeneratePaper() {
   // Submit Option 1: From Old Papers
   const handlePaperSubmit = async (e) => {
     e.preventDefault();
-    if (paperFiles.length === 0) {
-      setError('Please upload at least one paper.');
+    if (paperFiles.length === 0 && selectedExistingPaperIds.length === 0) {
+      setError('Please select existing papers or upload new ones.');
       return;
     }
     if (!paperForm.subject) {
@@ -147,8 +192,10 @@ export default function GeneratePaper() {
     setUploadProgress('');
 
     try {
-      // Step 1: Upload each paper file one by one
-      const paperIds = [];
+      // Start with already-selected existing paper IDs
+      const paperIds = [...selectedExistingPaperIds];
+
+      // Upload any new paper files
       for (let i = 0; i < paperFiles.length; i++) {
         setUploadProgress(`Uploading paper ${i + 1} of ${paperFiles.length}...`);
         const formData = new FormData();
@@ -163,9 +210,9 @@ export default function GeneratePaper() {
         paperIds.push(res.data.id);
       }
 
-      // Step 2: Generate paper from uploaded papers
-      setUploadProgress('Generating paper with AI (this may take a minute)...');
-      const res = await api.post('/api/exams/papers/create-from-papers/', {
+      // Generate paper from all selected papers (runs in background)
+      setUploadProgress('Starting AI question generation...');
+      await api.post('/api/exams/papers/create-from-papers/', {
         paper_ids: paperIds,
         instructions: paperForm.instructions,
         subject: parseInt(paperForm.subject),
@@ -175,14 +222,14 @@ export default function GeneratePaper() {
         num_long: parseInt(paperForm.num_long),
       });
 
-      setSuccess(`Paper generated successfully! ${res.data.questions_count || ''} questions created. You can now create an exam using this paper.`);
+      setSuccess('Question generation started! The AI is creating questions in the background. This usually takes 1-2 minutes. Check the question bank shortly.');
       setPaperFiles([]);
+      setSelectedExistingPaperIds([]);
       setPaperForm({ subject: '', instructions: '', total_marks: 50, num_mcq: 20, num_short: 5, num_long: 4 });
-      // Reset file input
       const fileInput = document.getElementById('paper-files-input');
       if (fileInput) fileInput.value = '';
     } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.detail || 'Failed to generate paper. Please try again.');
+      setError(err.response?.data?.error || err.response?.data?.detail || 'Failed to generate questions. Please try again.');
     } finally {
       setLoading(false);
       setUploadProgress('');
@@ -216,11 +263,11 @@ export default function GeneratePaper() {
         num_long: parseInt(instructionForm.num_long),
       });
 
-      setSuccess(`Paper generated successfully! ${res.data.questions_count || ''} questions created. You can now create an exam using this paper.`);
+      setSuccess('Question generation started! The AI is creating questions in the background. This usually takes 1-2 minutes. Check the question bank shortly.');
       setInstructionForm({ subject: '', chapter_ids: [], topics: '', total_marks: 50, num_mcq: 20, num_short: 5, num_long: 4 });
       setChapters([]);
     } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.detail || 'Failed to generate paper. Please try again.');
+      setError(err.response?.data?.error || err.response?.data?.detail || 'Failed to generate questions. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -243,7 +290,7 @@ export default function GeneratePaper() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <h1 className="text-2xl font-bold text-gray-800">Generate Question Paper</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Generate Questions</h1>
       </div>
 
       {/* Success Message */}
@@ -294,7 +341,7 @@ export default function GeneratePaper() {
             </div>
           </div>
           <p className="text-sm text-gray-500 leading-relaxed">
-            Upload up to 5 old question papers (PDF). The AI will analyze them and generate a fresh paper with similar style and difficulty.
+            Upload up to 5 old question papers (PDF). The AI will analyze them and generate new questions with similar style and difficulty.
           </p>
           {method === 'old_papers' && (
             <div className="mt-3 flex items-center gap-1 text-indigo-600 text-sm font-medium">
@@ -330,7 +377,7 @@ export default function GeneratePaper() {
             </div>
           </div>
           <p className="text-sm text-gray-500 leading-relaxed">
-            Choose specific chapters and topics, set marks distribution, and the AI will generate a custom question paper based on your instructions.
+            Choose specific chapters and topics, set question distribution, and the AI will generate questions based on your instructions.
           </p>
           {method === 'instructions' && (
             <div className="mt-3 flex items-center gap-1 text-purple-600 text-sm font-medium">
@@ -367,11 +414,57 @@ export default function GeneratePaper() {
             )}
           </div>
 
-          {/* Upload Papers */}
+          {/* Select Papers */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">Step 2: Upload Old Papers</h2>
-            <p className="text-sm text-gray-500 mb-4">Upload up to 5 previous question papers (PDF format).</p>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Step 2: Select Papers</h2>
+            <p className="text-sm text-gray-500 mb-4">Choose from previously uploaded papers or upload new ones.</p>
 
+            {/* Previously uploaded papers */}
+            {paperForm.subject && existingPapers.length > 0 && (
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-700 mb-2">Previously Uploaded Papers</p>
+                <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
+                  {existingPapers.map((paper) => (
+                    <label
+                      key={paper.id}
+                      className={`flex items-center gap-3 cursor-pointer px-3 py-2.5 rounded-lg transition ${
+                        selectedExistingPaperIds.includes(paper.id)
+                          ? 'bg-indigo-50 border border-indigo-200'
+                          : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedExistingPaperIds.includes(paper.id)}
+                        onChange={() => toggleExistingPaper(paper.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <svg className="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm text-gray-700 block truncate">{paper.title}</span>
+                        <span className="text-xs text-gray-400">
+                          {new Date(paper.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                {selectedExistingPaperIds.length > 0 && (
+                  <p className="text-sm text-indigo-600 font-medium mt-2">{selectedExistingPaperIds.length} paper(s) selected</p>
+                )}
+              </div>
+            )}
+
+            {paperForm.subject && existingPapers.length === 0 && (
+              <p className="text-sm text-gray-400 mb-4">No previously uploaded papers for this subject.</p>
+            )}
+
+            {/* Upload new papers */}
+            <p className="text-sm font-medium text-gray-700 mb-2">
+              {existingPapers.length > 0 ? 'Or Upload New Papers' : 'Upload Papers'}
+            </p>
             <div className="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:border-indigo-400 transition">
               <svg className="mx-auto w-10 h-10 text-gray-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -389,10 +482,10 @@ export default function GeneratePaper() {
               />
             </div>
 
-            {/* Uploaded files list */}
+            {/* Newly selected files list */}
             {paperFiles.length > 0 && (
               <div className="mt-4 space-y-2">
-                <p className="text-sm font-medium text-gray-700">{paperFiles.length} file(s) selected:</p>
+                <p className="text-sm font-medium text-gray-700">{paperFiles.length} new file(s) selected:</p>
                 {paperFiles.map((file, index) => (
                   <div key={index} className="flex items-center justify-between bg-gray-50 rounded-lg px-4 py-2">
                     <div className="flex items-center gap-2">
@@ -434,8 +527,8 @@ export default function GeneratePaper() {
 
           {/* Marks Distribution */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">Step 4: Marks Distribution</h2>
-            <p className="text-sm text-gray-500 mb-4">Set the question distribution for the generated paper.</p>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Step 4: Question Distribution</h2>
+            <p className="text-sm text-gray-500 mb-4">Set how many questions of each type to generate.</p>
 
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-4">
@@ -508,7 +601,7 @@ export default function GeneratePaper() {
           {/* Submit */}
           <button
             type="submit"
-            disabled={loading || paperFiles.length === 0}
+            disabled={loading || (paperFiles.length === 0 && selectedExistingPaperIds.length === 0)}
             className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
@@ -517,7 +610,7 @@ export default function GeneratePaper() {
                 Generating Paper...
               </span>
             ) : (
-              'Upload Papers & Generate with AI'
+              'Upload & Generate Questions'
             )}
           </button>
         </form>
@@ -599,8 +692,8 @@ export default function GeneratePaper() {
 
           {/* Marks Distribution */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-lg font-semibold text-gray-800 mb-1">Step 4: Marks Distribution</h2>
-            <p className="text-sm text-gray-500 mb-4">Set the question distribution for the generated paper.</p>
+            <h2 className="text-lg font-semibold text-gray-800 mb-1">Step 4: Question Distribution</h2>
+            <p className="text-sm text-gray-500 mb-4">Set how many questions of each type to generate.</p>
 
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-4">
@@ -672,7 +765,7 @@ export default function GeneratePaper() {
                 Generating Paper (this may take a minute)...
               </span>
             ) : (
-              'Generate Paper with AI'
+              'Generate Questions with AI'
             )}
           </button>
         </form>

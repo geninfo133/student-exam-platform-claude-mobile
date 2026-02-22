@@ -9,6 +9,7 @@ export default function PapersList() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [generating, setGenerating] = useState({});
+  const [deleting, setDeleting] = useState({});
   const [selectedPapers, setSelectedPapers] = useState([]);
 
   const fetchPapers = async (pageNum) => {
@@ -38,12 +39,44 @@ export default function PapersList() {
     setGenerating((prev) => ({ ...prev, [paperId]: true }));
     try {
       await api.post(`/api/exams/papers/${paperId}/generate/`);
-      await fetchPapers(page);
+      // Poll every 5 seconds until generation completes
+      const poll = setInterval(async () => {
+        try {
+          const res = await api.get('/api/exams/papers/', { params: { page } });
+          const data = res.data.results || res.data;
+          const paper = data.find((p) => p.id === paperId);
+          if (paper && (paper.questions_generated || paper.generation_error)) {
+            clearInterval(poll);
+            setPapers(data);
+            setHasMore(!!res.data.next);
+            setGenerating((prev) => ({ ...prev, [paperId]: false }));
+          }
+        } catch { /* ignore poll errors */ }
+      }, 5000);
+      // Stop polling after 3 minutes max
+      setTimeout(() => {
+        clearInterval(poll);
+        setGenerating((prev) => ({ ...prev, [paperId]: false }));
+        fetchPapers(page);
+      }, 180000);
     } catch (err) {
       const msg = err.response?.data?.detail || err.response?.data?.error || 'Failed to generate questions';
       alert(msg);
-    } finally {
       setGenerating((prev) => ({ ...prev, [paperId]: false }));
+    }
+  };
+
+  const handleDelete = async (paperId) => {
+    if (!confirm('Delete this paper? This cannot be undone.')) return;
+    setDeleting((prev) => ({ ...prev, [paperId]: true }));
+    try {
+      await api.delete(`/api/exams/papers/${paperId}/`);
+      setSelectedPapers((prev) => prev.filter((id) => id !== paperId));
+      await fetchPapers(page);
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete paper');
+    } finally {
+      setDeleting((prev) => ({ ...prev, [paperId]: false }));
     }
   };
 
@@ -62,16 +95,16 @@ export default function PapersList() {
   };
 
   const handleCreateFromSelected = () => {
-    navigate(`/teacher/create-from-papers?papers=${selectedPapers.join(',')}`);
+    navigate(`/teacher/generate-paper?papers=${selectedPapers.join(',')}`);
   };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">My Papers</h1>
+        <h1 className="text-2xl font-bold text-gray-800">Uploaded Papers</h1>
         <div className="flex gap-3">
-          <Link to="/teacher/create-from-papers" className="bg-purple-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-purple-700 transition text-sm">
-            Create Paper from Old Papers
+          <Link to="/teacher/generate-paper" className="bg-purple-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-purple-700 transition text-sm">
+            Generate Questions from Papers
           </Link>
           <Link to="/teacher/upload-paper" className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition text-sm">
             Upload New Paper
@@ -89,7 +122,7 @@ export default function PapersList() {
             onClick={handleCreateFromSelected}
             className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
           >
-            Create Paper from Selected
+            Generate Questions from Selected
           </button>
         </div>
       )}
@@ -173,6 +206,20 @@ export default function PapersList() {
                         'Generated'
                       ) : (
                         'Generate Questions'
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleDelete(paper.id)}
+                      disabled={deleting[paper.id]}
+                      className="px-3 py-2.5 rounded-lg text-sm font-medium transition min-h-[44px] text-red-600 hover:bg-red-50 border border-red-200 hover:border-red-300 disabled:opacity-50"
+                      title="Delete paper"
+                    >
+                      {deleting[paper.id] ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                       )}
                     </button>
                   </div>

@@ -8,12 +8,24 @@ export default function CreateExam() {
   const [chapters, setChapters] = useState([]);
   const [students, setStudents] = useState([]);
   const [selectedAssignment, setSelectedAssignment] = useState('');
+  const [selectionMode, setSelectionMode] = useState('random');
+  const [availableQuestions, setAvailableQuestions] = useState([]);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState([]);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
+  const [questionFilters, setQuestionFilters] = useState({
+    chapter: '',
+    question_type: '',
+    difficulty: '',
+  });
   const [form, setForm] = useState({
     title: '',
     subject: '',
     chapter_ids: [],
     duration_minutes: 90,
     total_marks: 50,
+    num_mcq: 20,
+    num_short: 5,
+    num_long: 4,
     student_ids: [],
     start_time: '',
     end_time: '',
@@ -21,13 +33,29 @@ export default function CreateExam() {
   const [loading, setLoading] = useState(false);
   const [initLoading, setInitLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isCoaching, setIsCoaching] = useState(false);
+  const [userRole, setUserRole] = useState('');
 
-  // Fetch teacher's assignments (subject + students mappings)
+  // Fetch subjects - from assignments for teachers, from subjects API for school admins
   useEffect(() => {
     const fetchAssignments = async () => {
       try {
-        const res = await api.get('/api/assignments/my/');
-        setAssignments(res.data.results || res.data);
+        const profileRes = await api.get('/api/auth/profile/');
+        const role = profileRes.data.role;
+        const orgType = profileRes.data.org_type;
+        setUserRole(role);
+        setIsCoaching(orgType === 'coaching');
+        if (orgType === 'coaching') {
+          setForm(prev => ({ ...prev, num_short: 0, num_long: 0 }));
+        }
+        if (role === 'school') {
+          const res = await api.get('/api/subjects/');
+          const subs = res.data.results || res.data;
+          setAssignments(subs.map(s => ({ subject: s.id, subject_name: s.name })));
+        } else {
+          const res = await api.get('/api/assignments/my/');
+          setAssignments(res.data.results || res.data);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -37,32 +65,81 @@ export default function CreateExam() {
     fetchAssignments();
   }, []);
 
-  // When subject changes, fetch chapters and reset assignment selection
+  // When subject changes, fetch chapters and students
   useEffect(() => {
     if (!form.subject) {
       setChapters([]);
       setStudents([]);
       setSelectedAssignment('');
       setForm((prev) => ({ ...prev, chapter_ids: [], student_ids: [] }));
+      setAvailableQuestions([]);
+      setSelectedQuestionIds([]);
       return;
     }
 
-    const fetchChapters = async () => {
+    api.get('/api/chapters/', { params: { subject: form.subject } }).then((res) => {
+      setChapters(res.data.results || res.data);
+      setForm((prev) => ({ ...prev, chapter_ids: [] }));
+    }).catch(() => {});
+
+    if (userRole === 'school') {
+      // School/coaching admin: fetch all students directly
+      api.get('/api/auth/members/', { params: { role: 'student' } }).then((res) => {
+        const data = res.data.results || res.data;
+        setStudents(data);
+        setForm((prev) => ({ ...prev, student_ids: data.map((s) => s.id) }));
+      }).catch(() => {});
+    } else {
+      // Teacher: use assignment-based student lookup
+      const matching = assignments.filter((a) => String(a.subject) === String(form.subject));
+      if (matching.length === 1) {
+        const assignment = matching[0];
+        setSelectedAssignment(String(assignment.id));
+        api.get('/api/auth/my-students/', {
+          params: { subject: assignment.subject, grade: assignment.grade, section: assignment.section },
+        }).then((res) => {
+          const data = res.data.results || res.data;
+          setStudents(data);
+          setForm((prev) => ({ ...prev, student_ids: data.map((s) => s.id) }));
+        }).catch(() => {});
+      } else {
+        setSelectedAssignment('');
+        setStudents([]);
+        setForm((prev) => ({ ...prev, student_ids: [] }));
+      }
+    }
+
+    // Reset question selection when subject changes
+    setSelectedQuestionIds([]);
+    setQuestionFilters({ chapter: '', question_type: '', difficulty: '' });
+  }, [form.subject, assignments, userRole]);
+
+  // Fetch questions when in manual mode and subject is selected
+  useEffect(() => {
+    if (selectionMode !== 'manual' || !form.subject) {
+      setAvailableQuestions([]);
+      return;
+    }
+
+    const fetchQuestions = async () => {
+      setQuestionsLoading(true);
       try {
-        const res = await api.get('/api/chapters/', { params: { subject: form.subject } });
-        setChapters(res.data.results || res.data);
-        setForm((prev) => ({ ...prev, chapter_ids: [] }));
+        const params = { subject: form.subject };
+        if (questionFilters.chapter) params.chapter = questionFilters.chapter;
+        if (questionFilters.question_type) params.question_type = questionFilters.question_type;
+        if (questionFilters.difficulty) params.difficulty = questionFilters.difficulty;
+        const res = await api.get('/api/questions/', { params });
+        setAvailableQuestions(res.data.results || res.data);
       } catch (err) {
         console.error(err);
+      } finally {
+        setQuestionsLoading(false);
       }
     };
-    fetchChapters();
-    setSelectedAssignment('');
-    setStudents([]);
-    setForm((prev) => ({ ...prev, student_ids: [] }));
-  }, [form.subject]);
+    fetchQuestions();
+  }, [selectionMode, form.subject, questionFilters]);
 
-  // When assignment (class/section) is selected, fetch students
+  // When assignment (class/section) is manually changed, fetch students
   useEffect(() => {
     if (!selectedAssignment) {
       setStudents([]);
@@ -72,19 +149,13 @@ export default function CreateExam() {
     const assignment = assignments.find((a) => String(a.id) === String(selectedAssignment));
     if (!assignment) return;
 
-    const fetchStudents = async () => {
-      try {
-        const res = await api.get('/api/auth/my-students/', {
-          params: { subject: assignment.subject, grade: assignment.grade, section: assignment.section },
-        });
-        const data = res.data.results || res.data;
-        setStudents(data);
-        setForm((prev) => ({ ...prev, student_ids: data.map((s) => s.id) }));
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchStudents();
+    api.get('/api/auth/my-students/', {
+      params: { subject: assignment.subject, grade: assignment.grade, section: assignment.section },
+    }).then((res) => {
+      const data = res.data.results || res.data;
+      setStudents(data);
+      setForm((prev) => ({ ...prev, student_ids: data.map((s) => s.id) }));
+    }).catch(() => {});
   }, [selectedAssignment, assignments]);
 
   // Derive unique subjects from teacher's assignments
@@ -109,6 +180,14 @@ export default function CreateExam() {
     });
   };
 
+  const toggleQuestion = (questionId) => {
+    setSelectedQuestionIds((prev) =>
+      prev.includes(questionId)
+        ? prev.filter((id) => id !== questionId)
+        : [...prev, questionId]
+    );
+  };
+
   const toggleStudent = (studentId) => {
     setForm((prev) => {
       const ids = prev.student_ids.includes(studentId)
@@ -127,28 +206,67 @@ export default function CreateExam() {
     });
   };
 
+  // Compute selected question stats
+  const selectedQuestions = availableQuestions.filter((q) => selectedQuestionIds.includes(q.id));
+  const selectedMcqCount = selectedQuestions.filter((q) => q.question_type === 'MCQ').length;
+  const selectedShortCount = selectedQuestions.filter((q) => q.question_type === 'SHORT').length;
+  const selectedLongCount = selectedQuestions.filter((q) => q.question_type === 'LONG').length;
+  const selectedTotalMarks = selectedMcqCount * 1 + selectedShortCount * 2 + selectedLongCount * 5;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      await api.post('/api/exams/assigned/create/', {
+      const payload = {
         title: form.title,
         subject: form.subject,
         chapter_ids: form.chapter_ids,
         duration_minutes: parseInt(form.duration_minutes, 10),
-        total_marks: parseInt(form.total_marks, 10),
+        total_marks: selectionMode === 'manual' ? selectedTotalMarks : parseInt(form.total_marks, 10),
         student_ids: form.student_ids,
         start_time: form.start_time,
         end_time: form.end_time,
-      });
+        selection_mode: selectionMode,
+      };
+
+      if (selectionMode === 'manual') {
+        payload.question_ids = selectedQuestionIds;
+        payload.num_mcq = selectedMcqCount;
+        payload.num_short = selectedShortCount;
+        payload.num_long = selectedLongCount;
+      } else {
+        payload.num_mcq = parseInt(form.num_mcq, 10);
+        payload.num_short = parseInt(form.num_short, 10);
+        payload.num_long = parseInt(form.num_long, 10);
+      }
+
+      await api.post('/api/exams/assigned/create/', payload);
       navigate('/teacher/results');
     } catch (err) {
       setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to create exam. Please try again.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const typeBadge = (type) => {
+    const colors = {
+      MCQ: 'bg-blue-100 text-blue-700',
+      SHORT: 'bg-green-100 text-green-700',
+      LONG: 'bg-purple-100 text-purple-700',
+    };
+    return colors[type] || 'bg-gray-100 text-gray-700';
+  };
+
+  const difficultyBadge = (diff) => {
+    const colors = {
+      EASY: 'bg-emerald-100 text-emerald-700',
+      MEDIUM: 'bg-amber-100 text-amber-700',
+      HARD: 'bg-red-100 text-red-700',
+    };
+    return colors[diff] || 'bg-gray-100 text-gray-700';
   };
 
   if (initLoading) {
@@ -221,8 +339,8 @@ export default function CreateExam() {
           )}
         </div>
 
-        {/* Class/Section selector */}
-        {form.subject && subjectAssignments.length > 0 && (
+        {/* Class/Section selector (teachers only, not for school/coaching admins) */}
+        {userRole !== 'school' && form.subject && subjectAssignments.length > 0 && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Class & Section</label>
             <select
@@ -264,35 +382,259 @@ export default function CreateExam() {
           )}
         </div>
 
-        {/* Duration & Total Marks */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Selection Mode Toggle */}
+        {form.subject && (
           <div>
-            <label htmlFor="duration_minutes" className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
-            <input
-              type="number"
-              id="duration_minutes"
-              name="duration_minutes"
-              value={form.duration_minutes}
-              onChange={handleChange}
-              min="1"
-              required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-2">Question Selection Mode</label>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setSelectionMode('random')}
+                className={`flex-1 px-4 py-2.5 text-sm font-medium transition ${
+                  selectionMode === 'random'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Random (Auto)
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectionMode('manual')}
+                className={`flex-1 px-4 py-2.5 text-sm font-medium transition ${
+                  selectionMode === 'manual'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                Select Questions Manually
+              </button>
+            </div>
           </div>
-          <div>
-            <label htmlFor="total_marks" className="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
-            <input
-              type="number"
-              id="total_marks"
-              name="total_marks"
-              value={form.total_marks}
-              onChange={handleChange}
-              min="1"
-              required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-            />
-          </div>
-        </div>
+        )}
+
+        {/* Random mode: Question Distribution */}
+        {selectionMode === 'random' && (
+          <>
+            {/* Duration & Total Marks */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="duration_minutes" className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                <input
+                  type="number"
+                  id="duration_minutes"
+                  name="duration_minutes"
+                  value={form.duration_minutes}
+                  onChange={handleChange}
+                  min="1"
+                  required
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                />
+              </div>
+              <div>
+                <label htmlFor="total_marks" className="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
+                <input
+                  type="number"
+                  id="total_marks"
+                  name="total_marks"
+                  value={form.total_marks}
+                  onChange={handleChange}
+                  min="1"
+                  required
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Question Distribution</label>
+              <div className={`grid gap-4 ${isCoaching ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                <div>
+                  <label htmlFor="num_mcq" className="block text-xs text-gray-500 mb-1">MCQ (1 mark each)</label>
+                  <input
+                    type="number"
+                    id="num_mcq"
+                    name="num_mcq"
+                    value={form.num_mcq}
+                    onChange={handleChange}
+                    min="0"
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                  />
+                </div>
+                {!isCoaching && (
+                  <>
+                    <div>
+                      <label htmlFor="num_short" className="block text-xs text-gray-500 mb-1">Short Answer (2 marks each)</label>
+                      <input
+                        type="number"
+                        id="num_short"
+                        name="num_short"
+                        value={form.num_short}
+                        onChange={handleChange}
+                        min="0"
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="num_long" className="block text-xs text-gray-500 mb-1">Long Answer (5 marks each)</label>
+                      <input
+                        type="number"
+                        id="num_long"
+                        name="num_long"
+                        value={form.num_long}
+                        onChange={handleChange}
+                        min="0"
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                Total: {parseInt(form.num_mcq || 0) + parseInt(form.num_short || 0) + parseInt(form.num_long || 0)} questions
+                ({parseInt(form.num_mcq || 0) * 1 + parseInt(form.num_short || 0) * 2 + parseInt(form.num_long || 0) * 5} marks)
+              </p>
+            </div>
+          </>
+        )}
+
+        {/* Manual mode: Question Browser */}
+        {selectionMode === 'manual' && form.subject && (
+          <>
+            {/* Duration for manual mode */}
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <label htmlFor="duration_minutes_manual" className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                <input
+                  type="number"
+                  id="duration_minutes_manual"
+                  name="duration_minutes"
+                  value={form.duration_minutes}
+                  onChange={handleChange}
+                  min="1"
+                  required
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+                />
+              </div>
+            </div>
+
+            {/* Filter bar */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Filter Questions</label>
+              <div className="grid grid-cols-3 gap-3">
+                <select
+                  value={questionFilters.chapter}
+                  onChange={(e) => setQuestionFilters((prev) => ({ ...prev, chapter: e.target.value }))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">All Chapters</option>
+                  {chapters.map((ch) => (
+                    <option key={ch.id} value={ch.id}>{ch.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={questionFilters.question_type}
+                  onChange={(e) => setQuestionFilters((prev) => ({ ...prev, question_type: e.target.value }))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">All Types</option>
+                  <option value="MCQ">MCQ</option>
+                  <option value="SHORT">Short Answer</option>
+                  <option value="LONG">Long Answer</option>
+                </select>
+                <select
+                  value={questionFilters.difficulty}
+                  onChange={(e) => setQuestionFilters((prev) => ({ ...prev, difficulty: e.target.value }))}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                >
+                  <option value="">All Difficulty</option>
+                  <option value="EASY">Easy</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HARD">Hard</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Question list */}
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Available Questions ({availableQuestions.length})
+                </label>
+                {selectedQuestionIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedQuestionIds([])}
+                    className="text-xs text-red-600 font-medium hover:underline"
+                  >
+                    Clear Selection
+                  </button>
+                )}
+              </div>
+
+              {questionsLoading ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                </div>
+              ) : availableQuestions.length === 0 ? (
+                <div className="border border-gray-200 rounded-lg p-6 text-center">
+                  <p className="text-sm text-gray-400">No questions found. Try adjusting filters or generate questions first.</p>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-lg max-h-96 overflow-y-auto divide-y divide-gray-100">
+                  {availableQuestions.map((q) => (
+                    <label
+                      key={q.id}
+                      className={`flex items-start gap-3 p-3 cursor-pointer transition ${
+                        selectedQuestionIds.includes(q.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedQuestionIds.includes(q.id)}
+                        onChange={() => toggleQuestion(q.id)}
+                        className="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-800 line-clamp-2">
+                          {q.question_text.length > 150
+                            ? q.question_text.substring(0, 150) + '...'
+                            : q.question_text}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${typeBadge(q.question_type)}`}>
+                            {q.question_type}
+                          </span>
+                          <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${difficultyBadge(q.difficulty)}`}>
+                            {q.difficulty}
+                          </span>
+                          {q.chapter_name && (
+                            <span className="text-xs text-gray-400">{q.chapter_name}</span>
+                          )}
+                          <span className="text-xs text-gray-400 ml-auto">
+                            {q.question_type === 'MCQ' ? 1 : q.question_type === 'SHORT' ? 2 : 5} mark(s)
+                          </span>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected summary */}
+              {selectedQuestionIds.length > 0 && (
+                <div className="mt-3 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <p className="text-sm font-medium text-indigo-800">
+                    Selected: {selectedQuestionIds.length} question(s)
+                  </p>
+                  <p className="text-xs text-indigo-600 mt-0.5">
+                    MCQ: {selectedMcqCount} | Short: {selectedShortCount} | Long: {selectedLongCount} | Total Marks: {selectedTotalMarks}
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {/* Start & End Time */}
         <div className="grid grid-cols-2 gap-4">
@@ -337,11 +679,11 @@ export default function CreateExam() {
             )}
           </div>
           {!form.subject ? (
-            <p className="text-sm text-gray-400">Select a subject to see assigned students</p>
-          ) : !selectedAssignment ? (
+            <p className="text-sm text-gray-400">Select a subject to see students</p>
+          ) : (userRole !== 'school' && !selectedAssignment) ? (
             <p className="text-sm text-gray-400">Select a class/section to load students</p>
           ) : students.length === 0 ? (
-            <p className="text-sm text-gray-400">No students found in this class/section</p>
+            <p className="text-sm text-gray-400">No students found</p>
           ) : (
             <div className="border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
               {students.map((stu) => (
@@ -370,7 +712,7 @@ export default function CreateExam() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || (selectionMode === 'manual' && selectedQuestionIds.length === 0)}
           className="w-full bg-indigo-600 text-white py-3 rounded-xl font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? (

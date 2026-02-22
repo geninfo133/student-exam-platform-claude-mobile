@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function ManageAssignments() {
   const { user } = useAuth();
+  const isCoaching = user?.org_type === 'coaching';
   const classFrom = user?.class_from || 1;
   const classTo = user?.class_to || 12;
   const classRange = Array.from({ length: classTo - classFrom + 1 }, (_, i) => classFrom + i);
@@ -55,9 +56,11 @@ export default function ManageAssignments() {
 
   useEffect(() => { fetchAll(); }, []);
 
-  // Auto-select students when grade+section change
+  // Auto-select students when grade+section change (or all students for coaching)
   useEffect(() => {
-    if (selectedGrade && selectedSection) {
+    if (isCoaching) {
+      setSelectedStudentIds(new Set(students.map((s) => s.id)));
+    } else if (selectedGrade && selectedSection) {
       const matching = students.filter(
         (s) => s.grade === selectedGrade && s.section === selectedSection
       );
@@ -65,7 +68,7 @@ export default function ManageAssignments() {
     } else {
       setSelectedStudentIds(new Set());
     }
-  }, [selectedGrade, selectedSection, students]);
+  }, [selectedGrade, selectedSection, students, isCoaching]);
 
   const showMsg = (text, type = 'success') => {
     setMessage({ text, type });
@@ -81,9 +84,11 @@ export default function ManageAssignments() {
     });
   };
 
-  const matchingStudents = students.filter(
-    (s) => selectedGrade && selectedSection && s.grade === selectedGrade && s.section === selectedSection
-  );
+  const matchingStudents = isCoaching
+    ? students
+    : students.filter(
+        (s) => selectedGrade && selectedSection && s.grade === selectedGrade && s.section === selectedSection
+      );
 
   const allSelected = matchingStudents.length > 0 && matchingStudents.every((s) => selectedStudentIds.has(s.id));
 
@@ -103,16 +108,22 @@ export default function ManageAssignments() {
   const selectTeacher = (tid) => {
     const id = String(tid);
     setSelectedTeacher(id);
-    const t = teachers.find((t) => String(t.id) === id);
-    if (t) {
-      setSelectedGrade(t.grade || '');
-      setSelectedSection(t.section || '');
+    if (!isCoaching) {
+      const t = teachers.find((t) => String(t.id) === id);
+      if (t) {
+        setSelectedGrade(t.grade || '');
+        setSelectedSection(t.section || '');
+      }
     }
   };
 
   const handleAssign = async () => {
-    if (!selectedTeacher || !selectedSubject || !selectedGrade || !selectedSection) {
-      showMsg('Please select a teacher, subject, class and section.', 'error');
+    if (!selectedTeacher || !selectedSubject) {
+      showMsg('Please select a teacher and subject.', 'error');
+      return;
+    }
+    if (!isCoaching && (!selectedGrade || !selectedSection)) {
+      showMsg('Please select a class and section.', 'error');
       return;
     }
     if (selectedStudentIds.size === 0) {
@@ -121,12 +132,18 @@ export default function ManageAssignments() {
     }
     setSubmitting(true);
     try {
-      await api.post('/api/assignments/create/', {
+      const payload = {
         teacher_id: parseInt(selectedTeacher, 10),
         subject_id: parseInt(selectedSubject, 10),
-        grade: selectedGrade,
-        section: selectedSection,
-      });
+      };
+      if (isCoaching) {
+        payload.grade = '-';
+        payload.section = '-';
+      } else {
+        payload.grade = selectedGrade;
+        payload.section = selectedSection;
+      }
+      await api.post('/api/assignments/create/', payload);
       showMsg(`Assignment created! ${selectedStudentIds.size} student(s) mapped.`);
       resetForm();
       fetchAssignments();
@@ -179,7 +196,11 @@ export default function ManageAssignments() {
           </Link>
           <h1 className="text-2xl md:text-3xl font-bold">Teacher Assignments</h1>
         </div>
-        <p className="text-indigo-100">Select a teacher, then pick subject and class to assign.</p>
+        <p className="text-indigo-100">
+          {isCoaching
+            ? 'Select a teacher, then pick a subject to assign.'
+            : 'Select a teacher, then pick subject and class to assign.'}
+        </p>
       </div>
 
       {/* Message */}
@@ -214,7 +235,7 @@ export default function ManageAssignments() {
                   <div>
                     <p className="font-medium text-gray-800 text-sm">{t.first_name} {t.last_name}</p>
                     <p className="text-xs text-gray-400">
-                      Class {t.grade}{t.section} &middot; @{t.username}
+                      {!isCoaching && <>Class {t.grade}{t.section} &middot; </>}@{t.username}
                     </p>
                   </div>
                   {String(t.id) === selectedTeacher && (
@@ -233,11 +254,15 @@ export default function ManageAssignments() {
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-gray-800">
               Students
-              {selectedGrade && selectedSection && (
+              {isCoaching ? (
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  All ({matchingStudents.length})
+                </span>
+              ) : selectedGrade && selectedSection ? (
                 <span className="text-sm font-normal text-gray-500 ml-2">
                   Class {selectedGrade}{selectedSection} ({matchingStudents.length})
                 </span>
-              )}
+              ) : null}
             </h2>
             {matchingStudents.length > 0 && (
               <button
@@ -250,11 +275,11 @@ export default function ManageAssignments() {
             )}
           </div>
           <div className="max-h-80 overflow-y-auto">
-            {!selectedGrade || !selectedSection ? (
+            {!isCoaching && (!selectedGrade || !selectedSection) ? (
               <div className="px-5 py-8 text-center text-gray-400 text-sm">Select a teacher to see students.</div>
             ) : matchingStudents.length === 0 ? (
               <div className="px-5 py-8 text-center text-gray-400 text-sm">
-                No students in Class {selectedGrade}{selectedSection}.
+                {isCoaching ? 'No students found.' : `No students in Class ${selectedGrade}${selectedSection}.`}
               </div>
             ) : (
               matchingStudents.map((s) => (
@@ -299,32 +324,36 @@ export default function ManageAssignments() {
               ))}
             </select>
           </div>
-          <div className="min-w-[120px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
-            <select
-              value={selectedGrade}
-              onChange={(e) => setSelectedGrade(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
-            >
-              <option value="">--</option>
-              {classRange.map((g) => (
-                <option key={g} value={String(g)}>Class {g}</option>
-              ))}
-            </select>
-          </div>
-          <div className="min-w-[120px]">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
-            >
-              <option value="">--</option>
-              {['A','B','C','D','E'].map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
+          {!isCoaching && (
+            <>
+              <div className="min-w-[120px]">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                <select
+                  value={selectedGrade}
+                  onChange={(e) => setSelectedGrade(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                >
+                  <option value="">--</option>
+                  {classRange.map((g) => (
+                    <option key={g} value={String(g)}>Class {g}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="min-w-[120px]">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Section</label>
+                <select
+                  value={selectedSection}
+                  onChange={(e) => setSelectedSection(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-sm bg-white"
+                >
+                  <option value="">--</option>
+                  {['A','B','C','D','E'].map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
           <div className="flex gap-3">
             {(selectedTeacher || selectedSubject) && (
               <button type="button" onClick={resetForm} className="px-4 py-2.5 text-sm text-gray-600 hover:text-gray-800 font-medium">
@@ -333,18 +362,18 @@ export default function ManageAssignments() {
             )}
             <button
               onClick={handleAssign}
-              disabled={submitting || !selectedTeacher || !selectedSubject || !selectedGrade || !selectedSection || selectedStudentIds.size === 0}
+              disabled={submitting || !selectedTeacher || !selectedSubject || (!isCoaching && (!selectedGrade || !selectedSection)) || selectedStudentIds.size === 0}
               className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-40"
             >
               {submitting ? 'Assigning...' : `Assign (${selectedStudentIds.size})`}
             </button>
           </div>
         </div>
-        {selectedTeacher && selectedSubject && selectedGrade && selectedSection && (
+        {selectedTeacher && selectedSubject && (isCoaching || (selectedGrade && selectedSection)) && (
           <p className="text-xs text-gray-500 mt-3">
             <span className="font-medium text-gray-700">{teachers.find(t => String(t.id) === selectedTeacher)?.first_name} {teachers.find(t => String(t.id) === selectedTeacher)?.last_name}</span>
             {' → '}<span className="font-medium text-indigo-600">{subjects.find(s => String(s.id) === selectedSubject)?.name}</span>
-            {' → '}<span className="font-medium text-gray-700">Class {selectedGrade}{selectedSection}</span>
+            {' → '}<span className="font-medium text-gray-700">{isCoaching ? 'All Students' : `Class ${selectedGrade}${selectedSection}`}</span>
             {' → '}<span className="font-medium text-purple-600">{selectedStudentIds.size} student(s)</span>
           </p>
         )}
@@ -362,7 +391,7 @@ export default function ManageAssignments() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">#</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Teacher</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Subject</th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-600">Class</th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-600">{isCoaching ? 'Scope' : 'Class'}</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-600">Students</th>
                 <th className="text-right px-4 py-3 font-semibold text-gray-600">Action</th>
               </tr>

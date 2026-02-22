@@ -25,7 +25,7 @@ class SubjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Subject
         fields = [
-            'id', 'name', 'code', 'description', 'duration_minutes',
+            'id', 'name', 'code', 'grade', 'description', 'duration_minutes',
             'total_marks', 'exam_type', 'exam_type_name',
             'chapter_count', 'question_count',
         ]
@@ -178,7 +178,21 @@ class ExamPaperSerializer(serializers.ModelSerializer):
 class ExamPaperUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamPaper
-        fields = ['title', 'subject', 'chapter', 'total_marks', 'file']
+        fields = ['id', 'title', 'subject', 'chapter', 'total_marks', 'file']
+        read_only_fields = ['id']
+
+
+# --- Question browse serializer (for manual selection) ---
+
+class QuestionBrowseSerializer(serializers.ModelSerializer):
+    chapter_name = serializers.CharField(source='chapter.name', read_only=True, default=None)
+
+    class Meta:
+        model = Question
+        fields = [
+            'id', 'question_type', 'question_text', 'marks', 'difficulty',
+            'option_a', 'option_b', 'option_c', 'option_d', 'chapter_name',
+        ]
 
 
 # --- AssignedExam serializers ---
@@ -193,7 +207,7 @@ class AssignedExamSerializer(serializers.ModelSerializer):
         model = AssignedExam
         fields = [
             'id', 'title', 'subject', 'subject_name', 'teacher_name',
-            'num_questions', 'total_marks', 'duration_minutes',
+            'num_mcq', 'num_short', 'num_long', 'total_marks', 'duration_minutes',
             'is_active', 'start_time', 'end_time', 'created_at',
             'student_count', 'completed_count',
         ]
@@ -211,18 +225,21 @@ class AssignedExamSerializer(serializers.ModelSerializer):
 class AssignedExamCreateSerializer(serializers.ModelSerializer):
     student_ids = serializers.ListField(child=serializers.IntegerField(), write_only=True)
     chapter_ids = serializers.ListField(child=serializers.IntegerField(), required=False, write_only=True)
+    question_ids = serializers.ListField(child=serializers.IntegerField(), required=False, write_only=True)
 
     class Meta:
         model = AssignedExam
         fields = [
-            'title', 'subject', 'chapter_ids', 'num_questions',
+            'title', 'subject', 'chapter_ids', 'selection_mode',
+            'num_mcq', 'num_short', 'num_long',
             'total_marks', 'duration_minutes', 'student_ids',
-            'start_time', 'end_time',
+            'question_ids', 'start_time', 'end_time',
         ]
 
     def create(self, validated_data):
         student_ids = validated_data.pop('student_ids', [])
         chapter_ids = validated_data.pop('chapter_ids', [])
+        question_ids = validated_data.pop('question_ids', [])
         teacher = self.context['request'].user
         school = teacher.school if teacher.role == 'teacher' else teacher
 
@@ -236,6 +253,9 @@ class AssignedExamCreateSerializer(serializers.ModelSerializer):
         if student_ids:
             students = User.objects.filter(id__in=student_ids, school=school, role='student')
             assigned_exam.assigned_to.set(students)
+        if question_ids and validated_data.get('selection_mode') == 'manual':
+            questions = Question.objects.filter(id__in=question_ids)
+            assigned_exam.selected_questions.set(questions)
         return assigned_exam
 
 
@@ -248,7 +268,7 @@ class StudentAssignedExamSerializer(serializers.ModelSerializer):
         model = AssignedExam
         fields = [
             'id', 'title', 'subject', 'subject_name', 'teacher_name',
-            'num_questions', 'total_marks', 'duration_minutes',
+            'num_mcq', 'num_short', 'num_long', 'total_marks', 'duration_minutes',
             'is_active', 'start_time', 'end_time', 'created_at',
             'my_attempt',
         ]
@@ -309,14 +329,16 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
         return obj.get_students().count()
 
     def get_grade_display(self, obj):
-        return f"Class {obj.grade}{obj.section}"
+        if obj.grade and obj.grade != '-':
+            return f"Class {obj.grade}{obj.section}"
+        return "All Students"
 
 
 class TeacherAssignmentCreateSerializer(serializers.Serializer):
     teacher_id = serializers.IntegerField()
     subject_id = serializers.IntegerField()
-    grade = serializers.CharField(max_length=2)
-    section = serializers.CharField(max_length=1)
+    grade = serializers.CharField(max_length=2, required=False, default='')
+    section = serializers.CharField(max_length=1, required=False, default='')
 
 
 # --- HandwrittenExam serializers ---

@@ -9,13 +9,15 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
     role = serializers.ChoiceField(choices=[('student', 'Student'), ('school', 'School')], default='student')
+    board = serializers.CharField(max_length=50, required=False, default='CBSE')
 
     class Meta:
         model = User
         fields = [
             'username', 'email', 'password', 'password2',
             'first_name', 'last_name', 'phone_number',
-            'grade', 'board', 'school_name', 'role',
+            'grade', 'board', 'school_name', 'role', 'org_type',
+            'class_from', 'class_to',
         ]
 
     def validate(self, attrs):
@@ -41,7 +43,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name',
             'phone_number', 'date_of_birth', 'grade', 'section', 'board',
             'school_name', 'parent_phone', 'created_at',
-            'role', 'school', 'student_id', 'teacher_id', 'school_account_name',
+            'role', 'org_type', 'class_from', 'class_to',
+            'school', 'student_id', 'teacher_id', 'school_account_name',
             'profile_photo',
         ]
         read_only_fields = ['id', 'username', 'created_at', 'role', 'school', 'student_id', 'teacher_id']
@@ -54,6 +57,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 class SchoolCreateTeacherSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
+    username = serializers.CharField(required=False, allow_blank=True)
     subject_ids = serializers.ListField(
         child=serializers.IntegerField(), required=False, default=[], write_only=True,
     )
@@ -66,16 +70,37 @@ class SchoolCreateTeacherSerializer(serializers.ModelSerializer):
             'teacher_id', 'subject_ids',
         ]
 
+    def _generate_unique_username(self, base):
+        """Generate a unique username by appending numbers if needed."""
+        username = base
+        counter = 1
+        while User.objects.filter(username=username).exists():
+            username = f'{base}{counter}'
+            counter += 1
+        return username
+
     def create(self, validated_data):
         subject_ids = validated_data.pop('subject_ids', [])
         school = self.context['request'].user
         password = validated_data.pop('password')
+
+        # Auto-generate unique username if not provided or already taken
+        username = validated_data.get('username', '').strip()
+        if not username:
+            # Build from first_name + school short name
+            first = validated_data.get('first_name', 'teacher').lower().replace(' ', '')
+            org_prefix = (school.username or 'org')[:10].lower()
+            username = f'{first}_{org_prefix}'
+        # Ensure uniqueness
+        validated_data['username'] = self._generate_unique_username(username)
+
         teacher = User(
             **validated_data,
             role='teacher',
             school=school,
             school_name=school.school_name,
             board=school.board,
+            org_type=school.org_type,
         )
         teacher.set_password(password)
         teacher.save()
@@ -97,6 +122,9 @@ class SchoolCreateTeacherSerializer(serializers.ModelSerializer):
 
 class SchoolCreateStudentSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
+    username = serializers.CharField(required=False, allow_blank=True)
+    grade = serializers.CharField(required=False, allow_blank=True, default='')
+    section = serializers.CharField(required=False, allow_blank=True, default='')
 
     class Meta:
         model = User
@@ -106,16 +134,34 @@ class SchoolCreateStudentSerializer(serializers.ModelSerializer):
             'grade', 'section', 'student_id', 'parent_phone',
         ]
 
+    def _generate_unique_username(self, base):
+        username = base
+        counter = 1
+        while User.objects.filter(username=username).exists():
+            username = f'{base}{counter}'
+            counter += 1
+        return username
+
     def create(self, validated_data):
         request_user = self.context['request'].user
         school = request_user if request_user.role == 'school' else request_user.school
         password = validated_data.pop('password')
+
+        # Auto-generate unique username if not provided or already taken
+        username = validated_data.get('username', '').strip()
+        if not username:
+            first = validated_data.get('first_name', 'student').lower().replace(' ', '')
+            org_prefix = (school.username if school else 'org')[:10].lower()
+            username = f'{first}_{org_prefix}'
+        validated_data['username'] = self._generate_unique_username(username)
+
         student = User(
             **validated_data,
             role='student',
             school=school,
             school_name=school.school_name if school else '',
             board=school.board if school else 'CBSE',
+            org_type=school.org_type if school else 'school',
         )
         student.set_password(password)
         student.save()
