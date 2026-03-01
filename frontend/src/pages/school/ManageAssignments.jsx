@@ -135,6 +135,7 @@ export default function ManageAssignments() {
       const payload = {
         teacher_id: parseInt(selectedTeacher, 10),
         subject_id: parseInt(selectedSubject, 10),
+        student_ids: Array.from(selectedStudentIds),
       };
       if (isCoaching) {
         payload.grade = '-';

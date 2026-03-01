@@ -182,8 +182,10 @@ class MemberListSerializer(serializers.ModelSerializer):
     def get_assigned_teachers(self, obj):
         if obj.role == 'student':
             from exams.models import TeacherAssignment
+            from django.db.models import Q
             assignments = TeacherAssignment.objects.filter(
-                school=obj.school, grade=obj.grade, section=obj.section,
+                Q(grade=obj.grade, section=obj.section) | Q(grade='-') | Q(grade=''),
+                school=obj.school,
             ).select_related('teacher', 'subject')
             return [
                 {

@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../api/axios';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer,
+} from 'recharts';
 
 export default function HandwrittenResults() {
   const [exams, setExams] = useState([]);
@@ -101,6 +105,58 @@ export default function HandwrittenResults() {
                         </p>
                         <p className="text-xs text-gray-500 mt-1">Percentage</p>
                       </div>
+                    </div>
+
+                    {/* Charts */}
+                    <div className="grid md:grid-cols-2 gap-4">
+                      {/* Score donut */}
+                      <div className="bg-white rounded-xl border border-gray-200 p-4">
+                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Score Overview</h4>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: 'Scored', value: exam.obtained_marks },
+                                { name: 'Lost', value: Math.max(0, exam.total_marks - exam.obtained_marks) },
+                              ]}
+                              cx="50%" cy="50%"
+                              innerRadius={50} outerRadius={72}
+                              dataKey="value"
+                              startAngle={90} endAngle={-270}
+                            >
+                              <Cell fill={pct >= 60 ? '#16a34a' : pct >= 40 ? '#ca8a04' : '#dc2626'} />
+                              <Cell fill="#e5e7eb" />
+                            </Pie>
+                            <Tooltip formatter={(v, n) => [`${v} marks`, n]} />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Per-question bar */}
+                      {grading.questions?.length > 0 && (
+                        <div className="bg-white rounded-xl border border-gray-200 p-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Question-wise Marks</h4>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <BarChart
+                              data={grading.questions.map(q => ({
+                                name: `Q${q.question_number}`,
+                                Scored: q.marks_awarded,
+                                Max: q.max_marks,
+                              }))}
+                              margin={{ top: 0, right: 5, left: -20, bottom: 0 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                              <YAxis tick={{ fontSize: 10 }} />
+                              <Tooltip />
+                              <Legend wrapperStyle={{ fontSize: 10 }} />
+                              <Bar dataKey="Max" fill="#e0e7ff" radius={[3,3,0,0]} />
+                              <Bar dataKey="Scored" fill="#4f46e5" radius={[3,3,0,0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
                     </div>
 
                     {/* Overall Feedback */}

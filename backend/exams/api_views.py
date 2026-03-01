@@ -818,6 +818,7 @@ class TeacherAssignmentCreateView(APIView):
         subject_id = serializer.validated_data['subject_id']
         grade = serializer.validated_data.get('grade', '')
         section = serializer.validated_data.get('section', '')
+        student_ids = serializer.validated_data.get('student_ids', [])
 
         # Coaching centres don't use grade/section — default to '-' (all students)
         if getattr(request.user, 'org_type', '') == 'coaching':
@@ -844,6 +845,11 @@ class TeacherAssignmentCreateView(APIView):
             grade=grade,
             section=section,
         )
+
+        # Save selected students to M2M
+        if student_ids:
+            students = User.objects.filter(id__in=student_ids, school=school, role='student')
+            assignment.students.set(students)
 
         data = TeacherAssignmentSerializer(assignment).data
         return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
@@ -888,7 +894,15 @@ class TeacherDashboardStatsView(APIView):
         assigned_count = AssignedExam.objects.filter(
             teacher=user
         ).count() if user.role == 'teacher' else AssignedExam.objects.filter(school=school).count()
-        students_count = User.objects.filter(school=school, role='student').count()
+        if user.role == 'teacher':
+            from django.db.models import Q
+            assignments = TeacherAssignment.objects.filter(teacher=user)
+            student_ids = set()
+            for a in assignments:
+                student_ids.update(a.students.values_list('id', flat=True))
+            students_count = len(student_ids)
+        else:
+            students_count = User.objects.filter(school=school, role='student').count()
         pending_reviews = UserExam.objects.filter(
             school=school,
             status='COMPLETED',
@@ -957,16 +971,111 @@ class SchoolDashboardStatsView(APIView):
 # Handwritten Answer Sheet Grading
 # ============================================================
 
+def _merge_answer_sheets(files):
+    """Merge multiple image/pdf files into a single PDF. Returns a Django InMemoryUploadedFile."""
+    import io
+    from PIL import Image
+    from django.core.files.uploadedfile import InMemoryUploadedFile
+
+    if len(files) == 1:
+        files[0].seek(0)
+        return files[0]
+
+    # Check if all files are PDFs — use pypdf for lossless PDF merging
+    all_pdfs = all(f.name.lower().endswith('.pdf') for f in files)
+    if all_pdfs:
+        try:
+            from pypdf import PdfWriter, PdfReader
+            writer = PdfWriter()
+            for f in files:
+                f.seek(0)
+                reader = PdfReader(f)
+                for page in reader.pages:
+                    writer.add_page(page)
+            buf = io.BytesIO()
+            writer.write(buf)
+            buf.seek(0)
+            return InMemoryUploadedFile(
+                buf, 'answer_sheet', 'merged.pdf',
+                'application/pdf', buf.getbuffer().nbytes, None
+            )
+        except Exception as e:
+            pass  # fall through to PIL path
+
+    # Mixed or image files — convert everything to images and save as PDF
+    images = []
+    for f in files:
+        f.seek(0)
+        data = f.read()
+        if f.name.lower().endswith('.pdf'):
+            # Try to convert PDF pages to images via pypdf + PIL
+            try:
+                from pypdf import PdfReader
+                import tempfile, subprocess, os
+                # Use pypdf to extract pages, then render with Pillow via pdf2image if available
+                try:
+                    from pdf2image import convert_from_bytes
+                    pages = convert_from_bytes(data, dpi=150)
+                    for page in pages:
+                        images.append(page.convert('RGB'))
+                    continue
+                except ImportError:
+                    pass
+                # Fallback: just open with PIL (works for single-image PDFs)
+                img = Image.open(io.BytesIO(data)).convert('RGB')
+                images.append(img)
+            except Exception:
+                pass
+        else:
+            try:
+                img = Image.open(io.BytesIO(data)).convert('RGB')
+                images.append(img)
+            except Exception:
+                pass
+
+    if not images:
+        files[0].seek(0)
+        return files[0]
+
+    buf = io.BytesIO()
+    images[0].save(buf, format='PDF', save_all=True, append_images=images[1:])
+    buf.seek(0)
+    return InMemoryUploadedFile(buf, 'answer_sheet', 'merged.pdf', 'application/pdf', buf.getbuffer().nbytes, None)
+
+
 class HandwrittenExamUploadView(generics.CreateAPIView):
-    """Upload a handwritten answer sheet + question paper for AI grading."""
+    """Upload a handwritten answer sheet + question paper for AI grading.
+    Accepts multiple answer_sheet files (pages) which are merged into one PDF.
+    """
     serializer_class = HandwrittenExamUploadSerializer
     permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
     parser_classes = [MultiPartParser, FormParser]
 
-    def perform_create(self, serializer):
-        user = self.request.user
+    def create(self, request, *args, **kwargs):
+        answer_sheets = request.FILES.getlist('answer_sheet')
+        question_papers = request.FILES.getlist('question_paper')
+
+        # Save the record normally (DRF picks up the last uploaded file for each field)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
         school = user if user.role == 'school' else user.school
-        serializer.save(school=school, teacher=user)
+        instance = serializer.save(school=school, teacher=user)
+
+        # Post-save: if multiple pages were uploaded, merge them and replace the stored file
+        if len(answer_sheets) > 1:
+            merged = _merge_answer_sheets(answer_sheets)
+            if instance.answer_sheet:
+                instance.answer_sheet.delete(save=False)
+            instance.answer_sheet.save('answer_merged.pdf', merged, save=True)
+
+        if len(question_papers) > 1:
+            merged = _merge_answer_sheets(question_papers)
+            if instance.question_paper:
+                instance.question_paper.delete(save=False)
+            instance.question_paper.save('question_merged.pdf', merged, save=True)
+
+        return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
 
 
 class HandwrittenExamProcessView(APIView):

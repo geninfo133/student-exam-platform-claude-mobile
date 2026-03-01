@@ -12,8 +12,8 @@ export default function UploadHandwritten() {
     student: '',
     student_name: '',
     total_marks: 50,
-    question_paper: null,
-    answer_sheet: null,
+    question_papers: [],  // multiple pages
+    answer_sheets: [],    // multiple pages
   });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
@@ -37,11 +37,27 @@ export default function UploadHandwritten() {
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    if (files) {
-      setForm((prev) => ({ ...prev, [name]: files[0] }));
+    if (name === 'answer_sheets') {
+      setForm((prev) => ({ ...prev, answer_sheets: [...prev.answer_sheets, ...Array.from(files)] }));
+    } else if (name === 'question_papers') {
+      setForm((prev) => ({ ...prev, question_papers: [...prev.question_papers, ...Array.from(files)] }));
     } else {
       setForm((prev) => ({ ...prev, [name]: value }));
     }
+  };
+
+  const removeFile = (field, index) => {
+    setForm((prev) => ({ ...prev, [field]: prev[field].filter((_, i) => i !== index) }));
+  };
+
+  const moveFile = (field, index, dir) => {
+    setForm((prev) => {
+      const files = [...prev[field]];
+      const target = index + dir;
+      if (target < 0 || target >= files.length) return prev;
+      [files[index], files[target]] = [files[target], files[index]];
+      return { ...prev, [field]: files };
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -50,8 +66,8 @@ export default function UploadHandwritten() {
     setError('');
     setSuccess('');
 
-    if (!form.question_paper || !form.answer_sheet) {
-      setError('Both question paper and answer sheet files are required.');
+    if (form.question_papers.length === 0 || form.answer_sheets.length === 0) {
+      setError('Both question paper and at least one answer sheet page are required.');
       setLoading(false);
       return;
     }
@@ -63,8 +79,8 @@ export default function UploadHandwritten() {
       if (form.student) formData.append('student', form.student);
       if (form.student_name) formData.append('student_name', form.student_name);
       formData.append('total_marks', form.total_marks);
-      formData.append('question_paper', form.question_paper);
-      formData.append('answer_sheet', form.answer_sheet);
+      form.question_papers.forEach((f) => formData.append('question_paper', f));
+      form.answer_sheets.forEach((f) => formData.append('answer_sheet', f));
 
       await api.post('/api/handwritten/upload/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -162,45 +178,124 @@ export default function UploadHandwritten() {
           />
         </div>
 
-        {/* Question Paper */}
+        {/* Question Paper — multiple pages */}
         <div>
-          <label htmlFor="question_paper" className="block text-sm font-medium text-gray-700 mb-1">Question Paper / Answer Key</label>
-          <input
-            type="file" id="question_paper" name="question_paper" onChange={handleChange}
-            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-          />
-          <p className="text-xs text-gray-400 mt-1">PDF or image (JPG, PNG)</p>
-        </div>
-
-        {/* Answer Sheet */}
-        <div>
-          <label htmlFor="answer_sheet" className="block text-sm font-medium text-gray-700 mb-1">Student's Handwritten Answer Sheet</label>
-          <input
-            type="file" id="answer_sheet" name="answer_sheet" onChange={handleChange}
-            accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
-          />
-          <p className="text-xs text-gray-400 mt-1">Photo or scan of the student's handwritten answers</p>
-        </div>
-
-        {/* File previews */}
-        <div className="grid grid-cols-2 gap-4">
-          {form.question_paper && (
-            <div className="border border-gray-200 rounded-lg p-3 text-center bg-gray-50">
-              <p className="text-xs text-gray-500 mb-1">Question Paper</p>
-              <p className="text-sm font-medium text-gray-700 truncate">{form.question_paper.name}</p>
-              <p className="text-xs text-gray-400">{(form.question_paper.size / 1024).toFixed(0)} KB</p>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Question Paper / Answer Key
+            <span className="ml-2 text-xs font-normal text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+              Multiple pages supported
+            </span>
+          </label>
+          <label className="flex flex-col items-center justify-center w-full border-2 border-dashed border-indigo-300 rounded-xl p-5 cursor-pointer hover:bg-indigo-50 transition bg-white">
+            <svg className="w-8 h-8 text-indigo-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+            </svg>
+            <p className="text-sm text-gray-600 font-medium">Click to add pages</p>
+            <p className="text-xs text-gray-400 mt-1">JPG, PNG, PDF — select multiple files at once or add page by page</p>
+            <input
+              type="file" name="question_papers" onChange={handleChange} multiple
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              className="hidden"
+            />
+          </label>
+          {form.question_papers.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-600">{form.question_papers.length} page(s)</p>
+              {form.question_papers.map((f, i) => (
+                <div key={i} className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                  <span className="text-xs font-bold text-indigo-500 w-5 text-center">P{i + 1}</span>
+                  {f.type.startsWith('image/') && (
+                    <img src={URL.createObjectURL(f)} alt={`Page ${i + 1}`} className="w-10 h-12 object-cover rounded border border-indigo-200" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-indigo-800 truncate">{f.name}</p>
+                    <p className="text-xs text-indigo-400">{(f.size / 1024).toFixed(0)} KB</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => moveFile('question_papers', i, -1)} disabled={i === 0}
+                      className="p-1 rounded hover:bg-indigo-100 disabled:opacity-30 text-indigo-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                    </button>
+                    <button type="button" onClick={() => moveFile('question_papers', i, 1)} disabled={i === form.question_papers.length - 1}
+                      className="p-1 rounded hover:bg-indigo-100 disabled:opacity-30 text-indigo-600">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <button type="button" onClick={() => removeFile('question_papers', i)}
+                      className="p-1 rounded hover:bg-red-100 text-red-400">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-          {form.answer_sheet && (
-            <div className="border border-purple-200 rounded-lg p-3 text-center bg-purple-50">
-              <p className="text-xs text-purple-500 mb-1">Answer Sheet</p>
-              <p className="text-sm font-medium text-purple-700 truncate">{form.answer_sheet.name}</p>
-              <p className="text-xs text-purple-400">{(form.answer_sheet.size / 1024).toFixed(0)} KB</p>
+        </div>
+
+        {/* Answer Sheets — multiple pages */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Student's Handwritten Answer Sheet
+            <span className="ml-2 text-xs font-normal text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+              Multiple pages supported
+            </span>
+          </label>
+          <label className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl p-5 cursor-pointer hover:bg-purple-50 transition bg-white">
+            <svg className="w-8 h-8 text-purple-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+            </svg>
+            <p className="text-sm text-gray-600 font-medium">Click to add pages</p>
+            <p className="text-xs text-gray-400 mt-1">JPG, PNG, PDF — select multiple files at once or add page by page</p>
+            <input
+              type="file" name="answer_sheets" onChange={handleChange} multiple
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
+              className="hidden"
+            />
+          </label>
+
+          {/* Page list */}
+          {form.answer_sheets.length > 0 && (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-600">{form.answer_sheets.length} page(s) — drag to reorder</p>
+              {form.answer_sheets.map((f, i) => (
+                <div key={i} className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                  <span className="text-xs font-bold text-purple-500 w-5 text-center">P{i + 1}</span>
+                  {f.type.startsWith('image/') && (
+                    <img
+                      src={URL.createObjectURL(f)}
+                      alt={`Page ${i + 1}`}
+                      className="w-10 h-12 object-cover rounded border border-purple-200"
+                    />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-purple-800 truncate">{f.name}</p>
+                    <p className="text-xs text-purple-400">{(f.size / 1024).toFixed(0)} KB</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => moveFile('answer_sheets', i, -1)} disabled={i === 0}
+                      className="p-1 rounded hover:bg-purple-100 disabled:opacity-30 text-purple-600" title="Move up">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                      </svg>
+                    </button>
+                    <button type="button" onClick={() => moveFile('answer_sheets', i, 1)} disabled={i === form.answer_sheets.length - 1}
+                      className="p-1 rounded hover:bg-purple-100 disabled:opacity-30 text-purple-600" title="Move down">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    <button type="button" onClick={() => removeFile('answer_sheets', i)}
+                      className="p-1 rounded hover:bg-red-100 text-red-400" title="Remove">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
+
 
         <button
           type="submit" disabled={loading}

@@ -278,6 +278,12 @@ class TeacherAssignment(models.Model):
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE)
     grade = models.CharField(max_length=2, default='', blank=True)
     section = models.CharField(max_length=1, default='', blank=True)
+    students = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        related_name='teacher_assignments',
+        help_text='Specific students assigned to this teacher for this subject',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -286,6 +292,8 @@ class TeacherAssignment(models.Model):
         return f"{self.teacher.get_full_name()} - {self.subject.name} (All Students)"
 
     def get_students(self):
+        if self.pk and self.students.exists():
+            return self.students.all()
         from django.contrib.auth import get_user_model
         User = get_user_model()
         filters = dict(school=self.school, role='student', is_active=True)

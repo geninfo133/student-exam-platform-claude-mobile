@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer,
+} from 'recharts';
 
 const STATUS_STYLES = {
   UPLOADED: 'bg-gray-100 text-gray-700',
@@ -230,8 +234,9 @@ export default function HandwrittenList() {
                     {expandedId === exam.id && detail && (
                       <tr>
                         <td colSpan={7} className="px-5 py-4 bg-gray-50">
-                          {/* Summary */}
-                          <div className="grid grid-cols-3 gap-4 mb-4">
+
+                          {/* Score Summary Cards */}
+                          <div className="grid grid-cols-3 gap-4 mb-6">
                             <div className="bg-white rounded-lg p-4 text-center border border-gray-200">
                               <p className="text-2xl font-bold text-indigo-600">{detail.obtained_marks}</p>
                               <p className="text-xs text-gray-500">Obtained Marks</p>
@@ -249,15 +254,69 @@ export default function HandwrittenList() {
                             </div>
                           </div>
 
+                          {/* Charts Row */}
+                          <div className="grid md:grid-cols-2 gap-4 mb-6">
+
+                            {/* Donut chart — Score vs Remaining */}
+                            <div className="bg-white rounded-xl border border-gray-200 p-4">
+                              <h4 className="text-sm font-semibold text-gray-700 mb-3">Score Overview</h4>
+                              <ResponsiveContainer width="100%" height={200}>
+                                <PieChart>
+                                  <Pie
+                                    data={[
+                                      { name: 'Scored', value: detail.obtained_marks },
+                                      { name: 'Lost', value: Math.max(0, detail.total_marks - detail.obtained_marks) },
+                                    ]}
+                                    cx="50%" cy="50%"
+                                    innerRadius={55} outerRadius={80}
+                                    dataKey="value"
+                                    startAngle={90} endAngle={-270}
+                                  >
+                                    <Cell fill={detail.percentage >= 60 ? '#16a34a' : detail.percentage >= 40 ? '#ca8a04' : '#dc2626'} />
+                                    <Cell fill="#e5e7eb" />
+                                  </Pie>
+                                  <Tooltip formatter={(v, n) => [`${v} marks`, n]} />
+                                  <Legend />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </div>
+
+                            {/* Bar chart — Per-question marks */}
+                            {detail.grading_data?.questions?.length > 0 && (
+                              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-3">Question-wise Marks</h4>
+                                <ResponsiveContainer width="100%" height={200}>
+                                  <BarChart
+                                    data={detail.grading_data.questions.map(q => ({
+                                      name: `Q${q.question_number}`,
+                                      Scored: q.marks_awarded,
+                                      Max: q.max_marks,
+                                    }))}
+                                    margin={{ top: 0, right: 10, left: -20, bottom: 0 }}
+                                  >
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                                    <YAxis tick={{ fontSize: 11 }} />
+                                    <Tooltip />
+                                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                                    <Bar dataKey="Max" fill="#e0e7ff" radius={[3,3,0,0]} />
+                                    <Bar dataKey="Scored" fill="#4f46e5" radius={[3,3,0,0]} />
+                                  </BarChart>
+                                </ResponsiveContainer>
+                              </div>
+                            )}
+                          </div>
+
                           {/* Overall feedback */}
                           {detail.grading_data?.overall_feedback && (
                             <div className="bg-indigo-50 rounded-lg p-3 mb-4 border border-indigo-100">
-                              <p className="text-sm text-indigo-800">{detail.grading_data.overall_feedback}</p>
+                              <p className="text-sm font-semibold text-indigo-800 mb-1">Overall Feedback</p>
+                              <p className="text-sm text-indigo-700">{detail.grading_data.overall_feedback}</p>
                             </div>
                           )}
 
-                          {/* Analysis sections (from Grade + Analyze mode) */}
-                          {(detail.grading_data?.strengths || detail.grading_data?.weaknesses || detail.grading_data?.recommendations) && (
+                          {/* Analysis — Strengths / Weaknesses / Recommendations */}
+                          {(detail.grading_data?.strengths?.length > 0 || detail.grading_data?.weaknesses?.length > 0 || detail.grading_data?.recommendations?.length > 0) && (
                             <div className="grid md:grid-cols-3 gap-3 mb-4">
                               {detail.grading_data.strengths?.length > 0 && (
                                 <div className="bg-green-50 rounded-lg p-3 border border-green-100">
@@ -286,7 +345,7 @@ export default function HandwrittenList() {
                             </div>
                           )}
 
-                          {/* Per-question breakdown */}
+                          {/* Per-question table */}
                           {detail.grading_data?.questions?.length > 0 && (
                             <div className="overflow-x-auto">
                               <table className="w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
@@ -323,7 +382,7 @@ export default function HandwrittenList() {
                             </div>
                           )}
 
-                          {/* Error message if failed */}
+                          {/* Error message */}
                           {detail.error_message && (
                             <div className="bg-red-50 rounded-lg p-3 mt-4 border border-red-100">
                               <p className="text-sm text-red-700">{detail.error_message}</p>

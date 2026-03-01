@@ -103,6 +103,12 @@ class TeacherStudentListView(generics.ListAPIView):
 
         if grade_sections:
             from django.db.models import Q
+            # Check if any assignment is for all students (coaching centre)
+            has_all_students = any(g in ('', '-') for g, s in grade_sections)
+            if has_all_students:
+                return User.objects.filter(
+                    school=teacher.school, role='student', is_active=True,
+                ).order_by('first_name')
             q = Q()
             for g, s in grade_sections:
                 q |= Q(grade=g, section=s)

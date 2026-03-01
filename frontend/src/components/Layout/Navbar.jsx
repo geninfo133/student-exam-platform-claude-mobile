@@ -22,6 +22,7 @@ export default function Navbar() {
           { to: '/school/subjects', label: 'Subjects' },
           { to: '/school/teachers', label: 'Teachers' },
           { to: '/school/students', label: 'Students' },
+          { to: '/school/assignments', label: 'Assignments' },
           { to: '/teacher/generate-paper', label: 'Generate Questions' },
           { to: '/teacher/papers', label: 'Papers' },
           { to: '/teacher/exams', label: 'Exams' },

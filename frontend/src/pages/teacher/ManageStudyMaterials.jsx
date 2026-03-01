@@ -22,7 +22,6 @@ export default function ManageStudyMaterials() {
   useEffect(() => {
     api.get('/api/assignments/my/').then(res => {
       const assignments = res.data.results || res.data;
-      // Deduplicate subjects from teacher's assignments
       const subjectMap = {};
       assignments.forEach(a => {
         if (!subjectMap[a.subject]) {

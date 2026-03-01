@@ -1,6 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
+
+const PREVIEW_SIZE = 220;
 
 export default function Profile() {
   const { user, fetchProfile } = useAuth();
@@ -9,6 +11,15 @@ export default function Profile() {
   const [message, setMessage] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
+
+  // Photo crop modal state
+  const [photoModal, setPhotoModal] = useState(false);
+  const [rawPhoto, setRawPhoto] = useState(null);
+  const [photoPos, setPhotoPos] = useState({ x: 0, y: 0 });
+  const [photoScale, setPhotoScale] = useState(1);
+  const [imgNatural, setImgNatural] = useState({ w: 0, h: 0 });
+  const dragging = useRef(false);
+  const lastPtr = useRef({ x: 0, y: 0 });
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -23,26 +34,102 @@ export default function Profile() {
     }
   };
 
-  const handlePhotoUpload = async (e) => {
+  // File selected → open crop modal
+  const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('profile_photo', file);
-      await api.patch('/api/auth/profile/', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      await fetchProfile();
-      setFormData(prev => ({ ...prev, profile_photo: user?.profile_photo }));
-      setMessage('Photo updated successfully!');
-      setTimeout(() => setMessage(''), 3000);
-    } catch {
-      setMessage('Failed to upload photo');
-    } finally {
-      setUploading(false);
-    }
+    const url = URL.createObjectURL(file);
+    setRawPhoto(url);
+    setPhotoPos({ x: 0, y: 0 });
+    setPhotoScale(1);
+    setPhotoModal(true);
+    e.target.value = '';
   };
+
+  // When image loads inside modal, scale to cover and center
+  const handleImgLoad = (e) => {
+    const img = e.target;
+    const w = img.naturalWidth;
+    const h = img.naturalHeight;
+    setImgNatural({ w, h });
+    const scale = Math.max(PREVIEW_SIZE / w, PREVIEW_SIZE / h);
+    setPhotoScale(scale);
+    const scaledW = w * scale;
+    const scaledH = h * scale;
+    setPhotoPos({ x: (PREVIEW_SIZE - scaledW) / 2, y: (PREVIEW_SIZE - scaledH) / 2 });
+  };
+
+  // Clamp position so image always covers the circle
+  const clampPos = useCallback((pos, scale) => {
+    const scaledW = imgNatural.w * scale;
+    const scaledH = imgNatural.h * scale;
+    return {
+      x: Math.min(0, Math.max(PREVIEW_SIZE - scaledW, pos.x)),
+      y: Math.min(0, Math.max(PREVIEW_SIZE - scaledH, pos.y)),
+    };
+  }, [imgNatural]);
+
+  const startDrag = (clientX, clientY) => {
+    dragging.current = true;
+    lastPtr.current = { x: clientX, y: clientY };
+  };
+  const moveDrag = (clientX, clientY) => {
+    if (!dragging.current) return;
+    const dx = clientX - lastPtr.current.x;
+    const dy = clientY - lastPtr.current.y;
+    lastPtr.current = { x: clientX, y: clientY };
+    setPhotoPos(prev => clampPos({ x: prev.x + dx, y: prev.y + dy }, photoScale));
+  };
+  const endDrag = () => { dragging.current = false; };
+
+  const handleScaleChange = (newScale) => {
+    setPhotoScale(newScale);
+    setPhotoPos(prev => clampPos(prev, newScale));
+  };
+
+  // Crop via canvas and upload
+  const handleApply = () => {
+    const img = new Image();
+    img.src = rawPhoto;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = PREVIEW_SIZE;
+      canvas.height = PREVIEW_SIZE;
+      const ctx = canvas.getContext('2d');
+      const srcX = -photoPos.x / photoScale;
+      const srcY = -photoPos.y / photoScale;
+      const srcW = PREVIEW_SIZE / photoScale;
+      const srcH = PREVIEW_SIZE / photoScale;
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
+      canvas.toBlob(async (blob) => {
+        setPhotoModal(false);
+        setUploading(true);
+        try {
+          const fd = new FormData();
+          fd.append('profile_photo', blob, 'profile.jpg');
+          await api.patch('/api/auth/profile/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          await fetchProfile();
+          setMessage('Photo updated successfully!');
+          setTimeout(() => setMessage(''), 3000);
+        } catch {
+          setMessage('Failed to upload photo');
+        } finally {
+          setUploading(false);
+          URL.revokeObjectURL(rawPhoto);
+        }
+      }, 'image/jpeg', 0.92);
+    };
+  };
+
+  const cancelModal = () => {
+    setPhotoModal(false);
+    URL.revokeObjectURL(rawPhoto);
+    setRawPhoto(null);
+  };
+
+  const minScale = imgNatural.w && imgNatural.h
+    ? Math.max(PREVIEW_SIZE / imgNatural.w, PREVIEW_SIZE / imgNatural.h)
+    : 1;
 
   if (!user) return null;
 
@@ -59,14 +146,24 @@ export default function Profile() {
       <div className="bg-white rounded-2xl shadow-sm p-8 border border-gray-100">
         {/* Profile Photo */}
         <div className="flex items-center gap-5 mb-6 pb-6 border-b border-gray-200">
-          <div>
+          <div className="relative group cursor-pointer" onClick={() => fileRef.current?.click()}>
             {user.profile_photo ? (
-              <img src={user.profile_photo} alt="Profile" className="w-20 h-20 rounded-full object-cover border-2 border-gray-200" />
+              <img
+                src={user.profile_photo}
+                alt="Profile"
+                className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+              />
             ) : (
               <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center text-3xl font-bold text-indigo-600">
                 {(user.first_name?.[0] || user.username?.[0] || '?').toUpperCase()}
               </div>
             )}
+            <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
           </div>
           <div>
             <h2 className="text-xl font-semibold text-gray-800">{user.first_name} {user.last_name}</h2>
@@ -83,13 +180,7 @@ export default function Profile() {
               </svg>
               {uploading ? 'Uploading...' : user.profile_photo ? 'Change Photo' : 'Add Photo'}
             </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              onChange={handlePhotoUpload}
-              className="hidden"
-            />
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
           </div>
         </div>
 
@@ -152,6 +243,83 @@ export default function Profile() {
           </div>
         )}
       </div>
+
+      {/* ── Photo Crop Modal ── */}
+      {photoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">Adjust Photo</h3>
+            <p className="text-sm text-gray-500 mb-5">Drag to reposition · Scroll or use slider to zoom</p>
+
+            {/* Circular preview with drag */}
+            <div className="flex justify-center mb-5">
+              <div
+                className="relative overflow-hidden rounded-full border-4 border-indigo-400 shadow-lg select-none"
+                style={{ width: PREVIEW_SIZE, height: PREVIEW_SIZE, cursor: dragging.current ? 'grabbing' : 'grab' }}
+                onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
+                onMouseMove={(e) => moveDrag(e.clientX, e.clientY)}
+                onMouseUp={endDrag}
+                onMouseLeave={endDrag}
+                onTouchStart={(e) => { const t = e.touches[0]; startDrag(t.clientX, t.clientY); }}
+                onTouchMove={(e) => { const t = e.touches[0]; moveDrag(t.clientX, t.clientY); }}
+                onTouchEnd={endDrag}
+                onWheel={(e) => {
+                  e.preventDefault();
+                  const delta = e.deltaY > 0 ? -0.05 : 0.05;
+                  handleScaleChange(Math.max(minScale, Math.min(4, photoScale + delta)));
+                }}
+              >
+                <img
+                  src={rawPhoto}
+                  alt="Preview"
+                  onLoad={handleImgLoad}
+                  draggable={false}
+                  style={{
+                    position: 'absolute',
+                    left: photoPos.x,
+                    top: photoPos.y,
+                    width: imgNatural.w * photoScale,
+                    height: imgNatural.h * photoScale,
+                    userSelect: 'none',
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Zoom slider */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                <span>Zoom</span>
+                <span>{Math.round(photoScale * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min={Math.round(minScale * 100)}
+                max={400}
+                value={Math.round(photoScale * 100)}
+                onChange={(e) => handleScaleChange(parseInt(e.target.value) / 100)}
+                className="w-full accent-indigo-600"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleApply}
+                className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-lg font-medium transition"
+              >
+                Apply
+              </button>
+              <button
+                onClick={cancelModal}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5 rounded-lg font-medium transition"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

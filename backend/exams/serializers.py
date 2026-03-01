@@ -326,6 +326,8 @@ class TeacherAssignmentSerializer(serializers.ModelSerializer):
         return obj.teacher.get_full_name() or obj.teacher.username
 
     def get_student_count(self, obj):
+        if obj.pk and obj.students.exists():
+            return obj.students.count()
         return obj.get_students().count()
 
     def get_grade_display(self, obj):
@@ -339,6 +341,9 @@ class TeacherAssignmentCreateSerializer(serializers.Serializer):
     subject_id = serializers.IntegerField()
     grade = serializers.CharField(max_length=2, required=False, default='')
     section = serializers.CharField(max_length=1, required=False, default='')
+    student_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
 
 
 # --- HandwrittenExam serializers ---
