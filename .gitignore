@@ -19,3 +19,6 @@ frontend/dist/
 # OS
 .DS_Store
 *.swp
+
+# Test/sample PDF files in project root
+*.pdf
