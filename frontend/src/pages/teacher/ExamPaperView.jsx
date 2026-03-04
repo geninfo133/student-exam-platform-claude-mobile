@@ -115,6 +115,12 @@ export default function ExamPaperView() {
 
   // Load selected paper
   useEffect(() => {
+    if (!examId) {
+      setLoading(false);
+      setError('');
+      setExam(null);
+      return;
+    }
     setLoading(true);
     setError('');
     setExam(null);
