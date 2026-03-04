@@ -99,18 +99,16 @@ export default function StudentProgressCard() {
   const rows = Object.values(grid).map((r) => {
     const score = Number(r.score || 0);
     const total = Number(r.total_marks || 0);
-    // Show "Subject · Category" only when category label is present
-    const catLabel = r.exam_category_display || r.exam_category || '';
-    const name = catLabel ? `${r.subject_name}  ·  ${catLabel}` : r.subject_name;
     return {
-      key:    `${r.subject_id}_${r.exam_category}`,
-      name,
+      key:      `${r.subject_id}_${r.exam_category}`,
+      subject:  r.subject_name,
+      category: r.exam_category_display || r.exam_category || '',
       score,
       total,
-      pct:    total > 0 ? Math.round((score / total) * 100) : 0,
-      source: r.source,
+      pct:      total > 0 ? Math.round((score / total) * 100) : 0,
+      source:   r.source,
     };
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  }).sort((a, b) => a.subject.localeCompare(b.subject) || a.category.localeCompare(b.category));
 
   const grandScore = rows.reduce((sum, r) => sum + r.score, 0);
   const grandTotal = rows.reduce((sum, r) => sum + r.total, 0);
@@ -286,6 +284,7 @@ export default function StudentProgressCard() {
                   <tr className="bg-gray-50 border-b border-gray-200">
                     <th className="text-left px-5 py-3.5 font-semibold text-gray-600">#</th>
                     <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Subject</th>
+                    <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Exam</th>
                     <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Max Marks</th>
                     <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Marks Obtained</th>
                     <th className="text-left px-5 py-3.5 font-semibold text-gray-600 min-w-[140px]">Percentage</th>
@@ -300,10 +299,11 @@ export default function StudentProgressCard() {
                         <td className="px-5 py-4 text-gray-400 font-medium">{idx + 1}</td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-800">{row.name}</span>
+                            <span className="font-semibold text-gray-800">{row.subject}</span>
                             {row.source === 'handwritten' && <span className="text-xs text-gray-400">✍️</span>}
                           </div>
                         </td>
+                        <td className="px-5 py-4 text-sm text-gray-500">{row.category || '—'}</td>
                         <td className="px-5 py-4 text-center font-medium text-gray-700">{row.total}</td>
                         <td className="px-5 py-4 text-center font-bold text-indigo-700">{row.score}</td>
                         <td className="px-5 py-4">{pctBar(row.pct)}</td>
@@ -320,7 +320,7 @@ export default function StudentProgressCard() {
                 {/* Total row */}
                 <tfoot>
                   <tr className="bg-indigo-50 border-t-2 border-indigo-100">
-                    <td className="px-5 py-4" colSpan={2}>
+                    <td className="px-5 py-4" colSpan={3}>
                       <span className="font-bold text-indigo-800">Total</span>
                     </td>
                     <td className="px-5 py-4 text-center font-bold text-gray-700">{grandTotal}</td>
