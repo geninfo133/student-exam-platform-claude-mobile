@@ -309,31 +309,37 @@ export default function TeacherDashboard() {
 
           {/* Recent Exams */}
           <div className="lg:col-span-2">
-            <div className="flex items-center justify-between mb-4 px-1">
-              <h2 className="text-base font-bold text-gray-700 uppercase tracking-wider">Recent Exams</h2>
+            {/* Header row: title + segmented filter + view all */}
+            <div className="flex items-center gap-3 mb-4 px-1 flex-wrap">
+              <h2 className="text-base font-bold text-gray-700 uppercase tracking-wider shrink-0">
+                Recent Exams
+              </h2>
+
+              {/* Segmented control */}
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                {[
+                  { value: 'all',         label: 'All'         },
+                  { value: 'online',      label: 'Online'      },
+                  { value: 'handwritten', label: 'Handwritten' },
+                ].map(({ value, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => setExamFilter(value)}
+                    className={`px-3 py-1 rounded-md text-xs font-semibold transition ${
+                      examFilter === value
+                        ? 'bg-white text-gray-800 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <Link to="/teacher/created-exams"
-                className="text-indigo-600 text-xs font-semibold hover:underline uppercase tracking-wide">
+                className="ml-auto text-indigo-600 text-xs font-semibold hover:underline uppercase tracking-wide shrink-0">
                 View All
               </Link>
-            </div>
-
-            {/* Filter pills */}
-            <div className="flex gap-1.5 mb-4">
-              {[
-                { value: 'all',         label: 'All',         active: 'bg-indigo-600 text-white shadow-sm' },
-                { value: 'online',      label: 'Online',      active: 'bg-indigo-600 text-white shadow-sm' },
-                { value: 'handwritten', label: 'Handwritten', active: 'bg-teal-600 text-white shadow-sm'   },
-              ].map(({ value, label, active }) => (
-                <button
-                  key={value}
-                  onClick={() => setExamFilter(value)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold transition ${
-                    examFilter === value ? active : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
             </div>
 
             {/* List */}
