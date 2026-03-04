@@ -169,6 +169,14 @@ IMPORTANT:
         )
 
         response_text = message.content[0].text.strip()
+        # Strip markdown code fences e.g. ```json ... ```
+        if response_text.startswith('```'):
+            # Remove opening fence + optional language tag
+            response_text = response_text[response_text.find('\n') + 1:]
+            # Remove closing fence
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
         result = json.loads(response_text)
 
         # Save grading data

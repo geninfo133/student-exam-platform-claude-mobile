@@ -1,6 +1,23 @@
 from django.db import models
 from django.conf import settings
 
+EXAM_CATEGORY_CHOICES = [
+    ('pre_mid', 'Pre-Mid Term'),
+    ('mid', 'Mid Term'),
+    ('post_mid', 'Post-Mid Term'),
+    ('annual', 'Annual'),
+    ('pat1', 'PAT 1'),
+    ('pat2', 'PAT 2'),
+    ('pat3', 'PAT 3'),
+    ('pat4', 'PAT 4'),
+    ('unit1', 'Unit Test 1'),
+    ('unit2', 'Unit Test 2'),
+    ('quarterly', 'Quarterly'),
+    ('half_yearly', 'Half Yearly'),
+    ('pre_final', 'Pre-Final'),
+    ('final', 'Final'),
+]
+
 
 class ExamType(models.Model):
     """Main exam categories: CBSE 10th, State Board 10th, etc."""
@@ -335,6 +352,12 @@ class HandwrittenExam(models.Model):
     title = models.CharField(max_length=200)
     answer_sheet = models.FileField(upload_to='handwritten/answers/%Y/%m/')
     question_paper = models.FileField(upload_to='handwritten/questions/%Y/%m/')
+    exam_category = models.CharField(
+        max_length=20,
+        choices=EXAM_CATEGORY_CHOICES,
+        blank=True, default='',
+        help_text='Exam category for progress card',
+    )
     total_marks = models.IntegerField(default=50)
     obtained_marks = models.FloatField(null=True, blank=True)
     percentage = models.FloatField(null=True, blank=True)
@@ -358,6 +381,7 @@ class AssignedExam(models.Model):
         ('random', 'Random from Question Bank'),
         ('manual', 'Manually Selected'),
     ]
+    EXAM_CATEGORY_CHOICES = EXAM_CATEGORY_CHOICES  # module-level constant
 
     school = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -380,6 +404,10 @@ class AssignedExam(models.Model):
     assigned_to = models.ManyToManyField(
         settings.AUTH_USER_MODEL, blank=True,
         related_name='assigned_exams',
+    )
+    exam_category = models.CharField(
+        max_length=20, choices=EXAM_CATEGORY_CHOICES, blank=True, default='',
+        help_text='Exam category for progress card (Pre-Mid, Mid, PAT1 etc.)',
     )
     is_active = models.BooleanField(default=True)
     start_time = models.DateTimeField(null=True, blank=True)

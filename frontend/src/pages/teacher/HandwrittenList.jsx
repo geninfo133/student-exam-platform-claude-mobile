@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, Fragment } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
+import { getCategoriesForBoard } from '../../utils/examCategories';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   PieChart, Pie, Cell, ResponsiveContainer,
@@ -14,11 +16,17 @@ const STATUS_STYLES = {
 };
 
 export default function HandwrittenList() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const boardCategories = getCategoriesForBoard(user?.board);
+  const categoryOptions = [{ value: '', label: '-- No Category --' }, ...boardCategories];
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [processingIds, setProcessingIds] = useState(new Set());
+  const [savingCategoryId, setSavingCategoryId] = useState(null);
 
   const fetchExams = useCallback(async () => {
     try {
@@ -34,6 +42,17 @@ export default function HandwrittenList() {
   useEffect(() => {
     fetchExams();
   }, [fetchExams]);
+
+  // Auto-expand exam from ?expand=id query param
+  useEffect(() => {
+    const expandId = Number(searchParams.get('expand'));
+    if (expandId && !loading) {
+      handleViewDetail(expandId);
+      setTimeout(() => {
+        document.getElementById(`hw-row-${expandId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  }, [loading]);
 
   // Poll for processing exams
   useEffect(() => {
@@ -70,6 +89,19 @@ export default function HandwrittenList() {
       }
     } catch (err) {
       alert(err.response?.data?.error || 'Delete failed');
+    }
+  };
+
+  const handleCategoryChange = async (id, newCategory) => {
+    setExams((prev) => prev.map((e) => e.id === id ? { ...e, exam_category: newCategory } : e));
+    setSavingCategoryId(id);
+    try {
+      await api.patch(`/api/handwritten/${id}/`, { exam_category: newCategory });
+    } catch {
+      alert('Failed to save category');
+      fetchExams();
+    } finally {
+      setSavingCategoryId(null);
     }
   };
 
@@ -132,6 +164,9 @@ export default function HandwrittenList() {
                   <th className="text-left px-5 py-3 font-semibold text-gray-600">Title</th>
                   <th className="text-left px-5 py-3 font-semibold text-gray-600">Student</th>
                   <th className="text-left px-5 py-3 font-semibold text-gray-600">Subject</th>
+                  {boardCategories.length > 0 && (
+                    <th className="text-left px-5 py-3 font-semibold text-gray-600">Category</th>
+                  )}
                   <th className="text-center px-5 py-3 font-semibold text-gray-600">Status</th>
                   <th className="text-right px-5 py-3 font-semibold text-gray-600">Marks</th>
                   <th className="text-right px-5 py-3 font-semibold text-gray-600">Date</th>
@@ -141,10 +176,38 @@ export default function HandwrittenList() {
               <tbody>
                 {exams.map((exam) => (
                   <Fragment key={exam.id}>
-                    <tr className="border-b border-gray-50 hover:bg-gray-50 transition">
+                    <tr id={`hw-row-${exam.id}`} className="border-b border-gray-50 hover:bg-gray-50 transition">
                       <td className="px-5 py-3 font-medium text-gray-800">{exam.title}</td>
                       <td className="px-5 py-3 text-gray-600">{exam.student_display_name}</td>
                       <td className="px-5 py-3 text-gray-600">{exam.subject_name}</td>
+                      {boardCategories.length > 0 && (
+                        <td className="px-5 py-3">
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={exam.exam_category || ''}
+                                onChange={(e) => handleCategoryChange(exam.id, e.target.value)}
+                                disabled={savingCategoryId === exam.id}
+                                className={`text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50 cursor-pointer ${
+                                  exam.status === 'GRADED' && !exam.exam_category
+                                    ? 'border border-orange-400 bg-orange-50 text-orange-700'
+                                    : 'border border-gray-200 bg-gray-50 text-gray-600'
+                                }`}
+                              >
+                                {categoryOptions.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                ))}
+                              </select>
+                              {savingCategoryId === exam.id && (
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-indigo-600 shrink-0" />
+                              )}
+                            </div>
+                            {exam.status === 'GRADED' && !exam.exam_category && (
+                              <span className="text-xs text-orange-600 font-medium">Set for Progress Card</span>
+                            )}
+                          </div>
+                        </td>
+                      )}
                       <td className="px-5 py-3 text-center">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_STYLES[exam.status] || ''}`}>
                           {exam.status === 'PROCESSING' && (
@@ -218,6 +281,16 @@ export default function HandwrittenList() {
                             </button>
                           )}
                           <button
+                            onClick={() => navigate(`/teacher/exam/${exam.id}/paper?type=handwritten`)}
+                            className="text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition"
+                            title="View uploaded files"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          </button>
+                          <button
                             onClick={() => handleDelete(exam.id)}
                             className="text-red-500 hover:text-red-700 transition p-1"
                             title="Delete"
@@ -233,7 +306,7 @@ export default function HandwrittenList() {
                     {/* Expanded detail row */}
                     {expandedId === exam.id && detail && (
                       <tr>
-                        <td colSpan={7} className="px-5 py-4 bg-gray-50">
+                        <td colSpan={boardCategories.length > 0 ? 8 : 7} className="px-5 py-4 bg-gray-50">
 
                           {/* Score Summary Cards */}
                           <div className="grid grid-cols-3 gap-4 mb-6">

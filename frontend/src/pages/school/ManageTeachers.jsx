@@ -24,6 +24,7 @@ export default function ManageTeachers() {
   const [deleting, setDeleting] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ first_name: '', last_name: '', email: '', phone_number: '' });
+  const [editSubjectIds, setEditSubjectIds] = useState([]);
   const [saving, setSaving] = useState(false);
   const [bgImages, setBgImages] = useState({});
 
@@ -122,14 +123,25 @@ export default function ManageTeachers() {
     setEditForm({
       first_name: teacher.first_name || '',
       last_name: teacher.last_name || '',
+      username: teacher.username || '',
       email: teacher.email || '',
       phone_number: teacher.phone_number || '',
+      teacher_id: teacher.teacher_id || '',
+      new_password: '',
     });
+    const currentSubjectNames = (teacher.assigned_teachers || []).map(a => a.subject_name);
+    const currentSubjectIds = subjects.filter(s => currentSubjectNames.includes(s.name)).map(s => s.id);
+    setEditSubjectIds(currentSubjectIds);
   };
 
   const cancelEditing = () => {
     setEditingId(null);
-    setEditForm({ first_name: '', last_name: '', email: '', phone_number: '' });
+    setEditForm({ first_name: '', last_name: '', username: '', email: '', phone_number: '', teacher_id: '', new_password: '' });
+    setEditSubjectIds([]);
+  };
+
+  const toggleEditSubject = (id) => {
+    setEditSubjectIds(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
 
   const handleEditChange = (e) => {
@@ -139,7 +151,7 @@ export default function ManageTeachers() {
   const handleEditSave = async (id) => {
     setSaving(true);
     try {
-      await api.patch(`/api/auth/members/${id}/update/`, editForm);
+      await api.patch(`/api/auth/members/${id}/update/`, { ...editForm, subject_ids: editSubjectIds });
       showMessage('Teacher updated successfully!');
       cancelEditing();
       fetchTeachers(page);
@@ -360,52 +372,64 @@ export default function ManageTeachers() {
               <div key={teacher.id} className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 hover:shadow-md transition">
                 {editingId === teacher.id ? (
                   /* Inline Edit Form */
-                  <div className="space-y-4">
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Edit Teacher</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">First Name</label>
-                        <input
-                          name="first_name"
-                          value={editForm.first_name}
-                          onChange={handleEditChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
-                          placeholder="First name"
-                        />
+                        <input name="first_name" value={editForm.first_name} onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm" placeholder="First name" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Last Name</label>
-                        <input
-                          name="last_name"
-                          value={editForm.last_name}
-                          onChange={handleEditChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
-                          placeholder="Last name"
-                        />
+                        <input name="last_name" value={editForm.last_name} onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm" placeholder="Last name" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Username</label>
+                        <input name="username" value={editForm.username} onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm" placeholder="Username" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Teacher ID</label>
+                        <input name="teacher_id" value={editForm.teacher_id} onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm" placeholder="e.g. TCH001" />
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
-                        <input
-                          name="email"
-                          type="email"
-                          value={editForm.email}
-                          onChange={handleEditChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
-                          placeholder="Email"
-                        />
+                        <input name="email" type="email" value={editForm.email} onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm" placeholder="Email" />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Phone Number</label>
-                        <input
-                          name="phone_number"
-                          value={editForm.phone_number}
-                          onChange={handleEditChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm"
-                          placeholder="Phone number"
-                        />
+                        <input name="phone_number" value={editForm.phone_number} onChange={handleEditChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm" placeholder="Phone number" />
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">New Password <span className="text-gray-400 font-normal">(leave blank to keep current)</span></label>
+                      <input name="new_password" type="password" value={editForm.new_password} onChange={handleEditChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm" placeholder="Enter new password" />
+                    </div>
+                    {/* Subject assignment */}
+                    {subjects.length > 0 && (
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Assigned Subject(s)</label>
+                        <div className="flex flex-wrap gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                          {subjects.map(s => (
+                            <label key={s.id} className="flex items-center gap-1.5 cursor-pointer text-sm">
+                              <input type="checkbox" checked={editSubjectIds.includes(s.id)} onChange={() => toggleEditSubject(s.id)}
+                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                              <span className="text-gray-700">{s.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div className="flex gap-2 pt-1">
                       <button
                         onClick={() => handleEditSave(teacher.id)}
@@ -445,16 +469,21 @@ export default function ManageTeachers() {
                             <p className="text-xs text-gray-400">{teacher.phone_number}</p>
                           )}
                         </div>
-                        {/* Show assigned subjects */}
-                        {teacher.assigned_teachers && teacher.assigned_teachers.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {teacher.assigned_teachers.map((at, idx) => (
-                              <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
-                                {at.subject_name}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        {/* Show assigned subjects (deduplicated) */}
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {teacher.assigned_teachers && teacher.assigned_teachers.length > 0
+                            ? [...new Map(teacher.assigned_teachers.map(a => [a.subject_name, a])).values()].map((at, idx) => (
+                                <span key={idx} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                                  {at.subject_name}
+                                </span>
+                              ))
+                            : (
+                                <span className="text-xs bg-yellow-50 text-yellow-600 border border-yellow-200 px-2 py-0.5 rounded-full">
+                                  No subject assigned
+                                </span>
+                              )
+                          }
+                        </div>
                       </div>
                     </div>
                     <div className="flex gap-2 self-start md:self-center">

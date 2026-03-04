@@ -133,11 +133,32 @@ class UpdateMemberView(generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         member = self.get_object()
-        allowed = ['first_name', 'last_name', 'email', 'phone_number', 'grade', 'section', 'student_id', 'teacher_id']
+        allowed = ['first_name', 'last_name', 'username', 'email', 'phone_number', 'grade', 'section', 'student_id', 'teacher_id']
         for field in allowed:
-            if field in request.data:
+            if field in request.data and request.data[field] != '':
                 setattr(member, field, request.data[field])
+        new_password = request.data.get('new_password', '')
+        if new_password:
+            member.set_password(new_password)
         member.save()
+
+        # Update subject assignments for teachers
+        if member.role == 'teacher' and 'subject_ids' in request.data:
+            from exams.models import TeacherAssignment, Subject
+            school = request.user
+            subject_ids = request.data.getlist('subject_ids') if hasattr(request.data, 'getlist') else request.data.get('subject_ids', [])
+            # Remove existing assignments and recreate
+            TeacherAssignment.objects.filter(teacher=member, school=school).delete()
+            for sid in subject_ids:
+                try:
+                    subject = Subject.objects.get(id=int(sid), school=school)
+                    TeacherAssignment.objects.get_or_create(
+                        teacher=member, subject=subject, school=school,
+                        defaults={'grade': '-', 'section': '-'}
+                    )
+                except (Subject.DoesNotExist, ValueError):
+                    pass
+
         return Response(MemberListSerializer(member).data)
 
 

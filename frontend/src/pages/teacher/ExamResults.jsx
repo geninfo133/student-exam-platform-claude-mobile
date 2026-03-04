@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
+import { getCategoriesForBoard } from '../../utils/examCategories';
 
 const GRADING_LABELS = {
   PENDING_REVIEW: 'Pending',
@@ -10,6 +12,7 @@ const GRADING_LABELS = {
 };
 
 export default function ExamResults() {
+  const { user } = useAuth();
   const [exams, setExams] = useState([]);
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +20,11 @@ export default function ExamResults() {
   const [hasMore, setHasMore] = useState(false);
   const [gradingIds, setGradingIds] = useState(new Set());
   const [deletingExamId, setDeletingExamId] = useState(null);
+  const [savingCategoryId, setSavingCategoryId] = useState(null);
+
+  // Category options filtered to the school's board
+  const boardCategories = getCategoriesForBoard(user?.board);
+  const categoryOptions = [{ value: '', label: '-- No Category --' }, ...boardCategories];
 
   const fetchExams = async (pageNum) => {
     try {
@@ -83,6 +91,20 @@ export default function ExamResults() {
         next.delete(examId);
         return next;
       });
+    }
+  };
+
+  const handleCategoryChange = async (examId, newCategory) => {
+    // Optimistically update the local list
+    setExams((prev) => prev.map((e) => e.id === examId ? { ...e, exam_category: newCategory } : e));
+    setSavingCategoryId(examId);
+    try {
+      await api.patch(`/api/exams/assigned/${examId}/`, { exam_category: newCategory });
+    } catch (err) {
+      alert('Failed to save category');
+      fetchExams(page);
+    } finally {
+      setSavingCategoryId(null);
     }
   };
 
@@ -204,6 +226,26 @@ export default function ExamResults() {
                           })}
                         </p>
                       </Link>
+
+                      {/* Exam Category inline selector — only shown when board has categories */}
+                      {boardCategories.length > 0 && (
+                        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.preventDefault()}>
+                          <select
+                            value={exam.exam_category || ''}
+                            onChange={(e) => handleCategoryChange(exam.id, e.target.value)}
+                            disabled={savingCategoryId === exam.id}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-gray-50 disabled:opacity-50 cursor-pointer"
+                            title="Set exam category for Progress Card"
+                          >
+                            {categoryOptions.map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                          </select>
+                          {savingCategoryId === exam.id && (
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-indigo-600 shrink-0" />
+                          )}
+                        </div>
+                      )}
                       <div className="flex items-center gap-6">
                         <div className="text-center">
                           <p className="text-lg font-bold text-indigo-600">{exam.student_count}</p>
@@ -219,6 +261,25 @@ export default function ExamResults() {
                           </p>
                           <p className="text-xs text-gray-500">Completed</p>
                         </div>
+                        <Link
+                          to={`/teacher/exam/${exam.id}/paper`}
+                          className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 p-2 rounded-lg transition"
+                          title="View question paper"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </Link>
+                        <Link
+                          to={`/teacher/create-exam/${exam.id}`}
+                          className="text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 p-2 rounded-lg transition"
+                          title="Edit exam"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </Link>
                         <button
                           onClick={(e) => handleDeleteExam(e, exam.id)}
                           disabled={deletingExamId === exam.id}

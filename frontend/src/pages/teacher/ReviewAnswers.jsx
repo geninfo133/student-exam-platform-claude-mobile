@@ -98,8 +98,8 @@ export default function ReviewAnswers() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
           <p className="text-red-700">{error}</p>
-          <Link to="/teacher/results" className="text-indigo-600 font-medium hover:underline mt-2 inline-block">
-            Back to Exam Results
+          <Link to="/teacher/created-exams" className="text-indigo-600 font-medium hover:underline mt-2 inline-block">
+            Back to Created Exams
           </Link>
         </div>
       </div>
@@ -117,7 +117,10 @@ export default function ReviewAnswers() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <Link to="/teacher/results" className="text-gray-400 hover:text-gray-600 transition">
+        <Link
+          to={exam.assigned_exam_id ? `/teacher/exam/${exam.assigned_exam_id}/submissions` : '/teacher/created-exams'}
+          className="text-gray-400 hover:text-gray-600 transition"
+        >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
@@ -375,8 +378,11 @@ export default function ReviewAnswers() {
 
       {/* Actions */}
       <div className="flex gap-4">
-        <Link to="/teacher/results" className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-indigo-700 transition">
-          Back to Exam Results
+        <Link
+          to={exam.assigned_exam_id ? `/teacher/exam/${exam.assigned_exam_id}/submissions` : '/teacher/created-exams'}
+          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-indigo-700 transition"
+        >
+          ← Back to Submissions
         </Link>
         <Link to="/teacher/dashboard" className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-medium hover:bg-gray-300 transition">
           Dashboard

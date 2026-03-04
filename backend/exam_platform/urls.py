@@ -24,6 +24,7 @@ from exams.api_views import (
     GenerateQuestionsFromPaperView, CreatePaperFromPapersView,
     GenerateFromInstructionsView,
     AssignedExamCreateView, AssignedExamListView, AssignedExamDeleteView,
+    AssignedExamSubmissionsView,
     StudentAssignedExamsView, TeacherReviewView,
     TeacherDashboardStatsView, SchoolDashboardStatsView,
     TeacherAssignmentListView, TeacherAssignmentCreateView,
@@ -37,6 +38,7 @@ from exams.api_views import (
     TeacherGradeExamView,
     PendingReviewListView,
     TeacherQuestionListView,
+    ProgressCardView,
 )
 
 urlpatterns = [
@@ -90,6 +92,7 @@ urlpatterns = [
     path('api/exams/assigned/create/', AssignedExamCreateView.as_view(), name='api-assigned-create'),
     path('api/exams/assigned/', AssignedExamListView.as_view(), name='api-assigned-list'),
     path('api/exams/assigned/<int:pk>/', AssignedExamDeleteView.as_view(), name='api-assigned-delete'),
+    path('api/exams/assigned/<int:pk>/submissions/', AssignedExamSubmissionsView.as_view(), name='api-assigned-submissions'),
     path('api/exams/assigned/my/', StudentAssignedExamsView.as_view(), name='api-assigned-my'),
 
     # Teacher review
@@ -119,6 +122,9 @@ urlpatterns = [
     # Analytics
     path('api/analytics/teacher/', TeacherAnalyticsView.as_view(), name='api-teacher-analytics'),
     path('api/analytics/student/', StudentAnalyticsView.as_view(), name='api-student-analytics'),
+
+    # Progress card
+    path('api/progress-card/', ProgressCardView.as_view(), name='api-progress-card'),
 
     # Site images
     path('api/site-images/', site_images_view, name='api-site-images'),

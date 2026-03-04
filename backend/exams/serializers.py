@@ -202,12 +202,14 @@ class AssignedExamSerializer(serializers.ModelSerializer):
     teacher_name = serializers.SerializerMethodField()
     student_count = serializers.SerializerMethodField()
     completed_count = serializers.SerializerMethodField()
+    exam_category_display = serializers.CharField(source='get_exam_category_display', read_only=True)
 
     class Meta:
         model = AssignedExam
         fields = [
             'id', 'title', 'subject', 'subject_name', 'teacher_name',
             'num_mcq', 'num_short', 'num_long', 'total_marks', 'duration_minutes',
+            'exam_category', 'exam_category_display',
             'is_active', 'start_time', 'end_time', 'created_at',
             'student_count', 'completed_count',
         ]
@@ -233,7 +235,7 @@ class AssignedExamCreateSerializer(serializers.ModelSerializer):
             'title', 'subject', 'chapter_ids', 'selection_mode',
             'num_mcq', 'num_short', 'num_long',
             'total_marks', 'duration_minutes', 'student_ids',
-            'question_ids', 'start_time', 'end_time',
+            'question_ids', 'start_time', 'end_time', 'exam_category',
         ]
 
     def create(self, validated_data):
@@ -263,12 +265,14 @@ class StudentAssignedExamSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source='subject.name', read_only=True)
     teacher_name = serializers.SerializerMethodField()
     my_attempt = serializers.SerializerMethodField()
+    exam_category_display = serializers.CharField(source='get_exam_category_display', read_only=True)
 
     class Meta:
         model = AssignedExam
         fields = [
             'id', 'title', 'subject', 'subject_name', 'teacher_name',
             'num_mcq', 'num_short', 'num_long', 'total_marks', 'duration_minutes',
+            'exam_category', 'exam_category_display',
             'is_active', 'start_time', 'end_time', 'created_at',
             'my_attempt',
         ]
@@ -353,6 +357,8 @@ class HandwrittenExamSerializer(serializers.ModelSerializer):
     student_display_name = serializers.SerializerMethodField()
     subject_name = serializers.CharField(source='subject.name', read_only=True)
 
+    exam_category_display = serializers.CharField(source='get_exam_category_display', read_only=True)
+
     class Meta:
         model = HandwrittenExam
         fields = [
@@ -360,6 +366,7 @@ class HandwrittenExamSerializer(serializers.ModelSerializer):
             'teacher', 'teacher_name',
             'student', 'student_name', 'student_display_name',
             'answer_sheet', 'question_paper',
+            'exam_category', 'exam_category_display',
             'total_marks', 'obtained_marks', 'percentage',
             'status', 'grading_data', 'error_message',
             'created_at',
@@ -381,4 +388,4 @@ class HandwrittenExamSerializer(serializers.ModelSerializer):
 class HandwrittenExamUploadSerializer(serializers.ModelSerializer):
     class Meta:
         model = HandwrittenExam
-        fields = ['title', 'subject', 'student', 'student_name', 'answer_sheet', 'question_paper', 'total_marks']
+        fields = ['title', 'subject', 'student', 'student_name', 'answer_sheet', 'question_paper', 'total_marks', 'exam_category']

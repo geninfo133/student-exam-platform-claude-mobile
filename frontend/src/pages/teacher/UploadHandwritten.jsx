@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
+import { getCategoriesForBoard } from '../../utils/examCategories';
 
 export default function UploadHandwritten() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const boardCategories = getCategoriesForBoard(user?.board);
   const [subjects, setSubjects] = useState([]);
   const [students, setStudents] = useState([]);
   const [form, setForm] = useState({
@@ -11,6 +15,7 @@ export default function UploadHandwritten() {
     subject: '',
     student: '',
     student_name: '',
+    exam_category: '',
     total_marks: 50,
     question_papers: [],  // multiple pages
     answer_sheets: [],    // multiple pages
@@ -79,6 +84,7 @@ export default function UploadHandwritten() {
       if (form.student) formData.append('student', form.student);
       if (form.student_name) formData.append('student_name', form.student_name);
       formData.append('total_marks', form.total_marks);
+      if (form.exam_category) formData.append('exam_category', form.exam_category);
       form.question_papers.forEach((f) => formData.append('question_paper', f));
       form.answer_sheets.forEach((f) => formData.append('answer_sheet', f));
 
@@ -177,6 +183,24 @@ export default function UploadHandwritten() {
             className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
           />
         </div>
+
+        {/* Exam Category */}
+        {boardCategories.length > 0 && (
+          <div>
+            <label htmlFor="exam_category" className="block text-sm font-medium text-gray-700 mb-1">
+              Exam Category <span className="text-gray-400 font-normal">(for Progress Card)</span>
+            </label>
+            <select
+              id="exam_category" name="exam_category" value={form.exam_category} onChange={handleChange}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+            >
+              <option value="">-- None / Not categorised --</option>
+              {boardCategories.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Question Paper — multiple pages */}
         <div>

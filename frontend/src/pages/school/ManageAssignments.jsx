@@ -238,6 +238,16 @@ export default function ManageAssignments() {
                     <p className="text-xs text-gray-400">
                       {!isCoaching && <>Class {t.grade}{t.section} &middot; </>}@{t.username}
                     </p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {t.assigned_teachers?.length > 0
+                        ? [...new Map(t.assigned_teachers.map(a => [a.subject_name, a])).values()].map((a, i) => (
+                            <span key={i} className="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">
+                              {a.subject_name}
+                            </span>
+                          ))
+                        : <span className="text-xs bg-yellow-50 text-yellow-600 px-1.5 py-0.5 rounded">No subject</span>
+                      }
+                    </div>
                   </div>
                   {String(t.id) === selectedTeacher && (
                     <svg className="w-5 h-5 text-indigo-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">

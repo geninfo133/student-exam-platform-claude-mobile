@@ -655,6 +655,11 @@ class TeacherQuestionListView(generics.ListAPIView):
         if difficulty:
             qs = qs.filter(difficulty=difficulty)
 
+        ids = self.request.query_params.get('ids')
+        if ids:
+            id_list = [i.strip() for i in ids.split(',') if i.strip().isdigit()]
+            qs = qs.filter(id__in=id_list)
+
         return qs
 
 
@@ -680,20 +685,129 @@ class AssignedExamListView(generics.ListAPIView):
 
 
 class AssignedExamDeleteView(APIView):
-    """Teacher/school deletes an assigned exam."""
+    """Teacher/school deletes or updates an assigned exam."""
     permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
 
-    def delete(self, request, pk):
+    def _get_exam(self, request, pk):
         user = request.user
         try:
             if user.role == 'school':
-                exam = AssignedExam.objects.get(pk=pk, school=user)
-            else:
-                exam = AssignedExam.objects.get(pk=pk, teacher=user)
+                return AssignedExam.objects.get(pk=pk, school=user)
+            return AssignedExam.objects.get(pk=pk, teacher=user)
         except AssignedExam.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        """Get full exam details for editing."""
+        exam = self._get_exam(request, pk)
+        if not exam:
+            return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        def serialize_question(q):
+            return {
+                'id': q.id,
+                'question_text': q.question_text,
+                'question_type': q.question_type,
+                'difficulty': q.difficulty,
+                'chapter_name': q.chapter.name if q.chapter else '',
+                'marks': q.marks,
+                'option_a': q.option_a,
+                'option_b': q.option_b,
+                'option_c': q.option_c,
+                'option_d': q.option_d,
+                'correct_answer': q.correct_answer,
+                'model_answer': q.model_answer,
+            }
+
+        questions_data = []
+        questions_source = 'manual'
+
+        if exam.selection_mode == 'manual' and exam.selected_questions.exists():
+            # Manual exam: use pre-selected questions
+            for q in exam.selected_questions.select_related('chapter').order_by('question_type', 'id'):
+                questions_data.append(serialize_question(q))
+        else:
+            # Random exam: get questions from the first completed student attempt
+            first_attempt = (
+                UserExam.objects
+                .filter(assigned_exam=exam, status='COMPLETED')
+                .prefetch_related('answers__question__chapter')
+                .order_by('completed_at')
+                .first()
+            )
+            if first_attempt:
+                seen_ids = set()
+                qs = sorted(
+                    first_attempt.answers.select_related('question__chapter').all(),
+                    key=lambda a: (a.question.question_type, a.question.id)
+                )
+                for ans in qs:
+                    q = ans.question
+                    if q.id not in seen_ids:
+                        seen_ids.add(q.id)
+                        questions_data.append(serialize_question(q))
+                questions_source = 'attempt'
+
+        data = {
+            'id': exam.id,
+            'title': exam.title,
+            'subject': exam.subject_id,
+            'subject_name': exam.subject.name,
+            'chapter_ids': list(exam.chapters.values_list('id', flat=True)),
+            'selection_mode': exam.selection_mode,
+            'questions_source': questions_source,
+            'num_mcq': exam.num_mcq,
+            'num_short': exam.num_short,
+            'num_long': exam.num_long,
+            'total_marks': exam.total_marks,
+            'duration_minutes': exam.duration_minutes,
+            'exam_category': exam.exam_category,
+            'start_time': exam.start_time.isoformat() if exam.start_time else '',
+            'end_time': exam.end_time.isoformat() if exam.end_time else '',
+            'student_ids': list(exam.assigned_to.values_list('id', flat=True)),
+            'question_ids': list(exam.selected_questions.values_list('id', flat=True)),
+            'questions': questions_data,
+        }
+        return Response(data)
+
+    def delete(self, request, pk):
+        exam = self._get_exam(request, pk)
+        if not exam:
             return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
         exam.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def patch(self, request, pk):
+        """Update an assigned exam's fields."""
+        exam = self._get_exam(request, pk)
+        if not exam:
+            return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        scalar_fields = [
+            'title', 'duration_minutes', 'total_marks',
+            'num_mcq', 'num_short', 'num_long',
+            'exam_category', 'start_time', 'end_time', 'is_active',
+        ]
+        updated_fields = []
+        for field in scalar_fields:
+            if field in request.data:
+                setattr(exam, field, request.data[field] or None if field in ('start_time', 'end_time') and request.data[field] == '' else request.data[field])
+                updated_fields.append(field)
+        if updated_fields:
+            exam.save(update_fields=updated_fields)
+
+        if 'chapter_ids' in request.data:
+            exam.chapters.set(request.data['chapter_ids'])
+        if 'student_ids' in request.data:
+            school = exam.school
+            students = User.objects.filter(id__in=request.data['student_ids'], school=school, role='student')
+            exam.assigned_to.set(students)
+        if 'question_ids' in request.data:
+            from .models import Question as QuestionModel
+            questions = QuestionModel.objects.filter(id__in=request.data['question_ids'])
+            exam.selected_questions.set(questions)
+
+        return Response({'id': exam.id, 'message': 'Exam updated successfully'})
 
 
 class StudentAssignedExamsView(generics.ListAPIView):
@@ -710,6 +824,58 @@ class StudentAssignedExamsView(generics.ListAPIView):
         ctx = super().get_serializer_context()
         ctx['request'] = self.request
         return ctx
+
+
+# ============================================================
+# Assigned Exam Submissions List
+# ============================================================
+
+class AssignedExamSubmissionsView(APIView):
+    """List all student submissions for a given AssignedExam."""
+    permission_classes = [permissions.IsAuthenticated, IsSchoolOrTeacher]
+
+    def get(self, request, pk):
+        user = request.user
+        school = user if user.role == 'school' else user.school
+        try:
+            assigned_exam = AssignedExam.objects.select_related('subject').get(
+                id=pk, school=school,
+            )
+        except AssignedExam.DoesNotExist:
+            return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # All students assigned to this exam
+        assigned_students = list(assigned_exam.assigned_to.all())
+
+        # All UserExam attempts for this exam
+        attempts = {
+            ue.user_id: ue
+            for ue in UserExam.objects.filter(
+                assigned_exam=assigned_exam,
+            ).select_related('user')
+        }
+
+        rows = []
+        for student in assigned_students:
+            ue = attempts.get(student.id)
+            rows.append({
+                'student_id': student.id,
+                'student_name': student.get_full_name() or student.username,
+                'user_exam_id': ue.id if ue else None,
+                'status': ue.status if ue else 'NOT_STARTED',
+                'grading_status': ue.grading_status if ue else None,
+                'score': ue.score if ue else None,
+                'total_marks': sum(a.question.marks for a in ue.answers.select_related('question').all()) if ue else None,
+                'percentage': ue.percentage if ue else None,
+                'completed_at': ue.completed_at if ue else None,
+            })
+
+        return Response({
+            'exam_id': assigned_exam.id,
+            'exam_title': assigned_exam.title,
+            'subject': assigned_exam.subject.name if assigned_exam.subject else '',
+            'submissions': rows,
+        })
 
 
 # ============================================================
@@ -735,6 +901,7 @@ class TeacherReviewView(APIView):
         data = UserExamDetailSerializer(user_exam).data
         data['student_name'] = user_exam.user.get_full_name() or user_exam.user.username
         data['student_username'] = user_exam.user.username
+        data['assigned_exam_id'] = user_exam.assigned_exam_id
         return Response(data)
 
     def patch(self, request, exam_id):
@@ -895,11 +1062,18 @@ class TeacherDashboardStatsView(APIView):
             teacher=user
         ).count() if user.role == 'teacher' else AssignedExam.objects.filter(school=school).count()
         if user.role == 'teacher':
-            from django.db.models import Q
-            assignments = TeacherAssignment.objects.filter(teacher=user)
             student_ids = set()
-            for a in assignments:
+            # From explicit teacher assignments (grade/section based)
+            for a in TeacherAssignment.objects.filter(teacher=user):
                 student_ids.update(a.students.values_list('id', flat=True))
+            # From assigned exams created by this teacher
+            for ae in AssignedExam.objects.filter(teacher=user).prefetch_related('assigned_to'):
+                student_ids.update(ae.assigned_to.values_list('id', flat=True))
+            # From handwritten exams uploaded by this teacher
+            hw_ids = HandwrittenExam.objects.filter(
+                teacher=user, student__isnull=False
+            ).values_list('student_id', flat=True)
+            student_ids.update(hw_ids)
             students_count = len(student_ids)
         else:
             students_count = User.objects.filter(school=school, role='student').count()
@@ -910,20 +1084,55 @@ class TeacherDashboardStatsView(APIView):
         ).count()
         handwritten_graded = HandwrittenExam.objects.filter(school=school, status='GRADED').count()
 
-        # Recent exams by students
-        recent_exams = UserExam.objects.filter(
+        # Recent online exams
+        online_exams = UserExam.objects.filter(
             school=school, status='COMPLETED',
         ).select_related('user', 'subject').order_by('-completed_at')[:10]
 
         recent_data = [{
             'id': e.id,
+            'type': 'online',
             'student': e.user.get_full_name() or e.user.username,
+            'student_id': e.user.id,
             'subject': e.subject.name,
             'score': e.score,
             'total_marks': e.subject.total_marks if e.subject else 50,
             'percentage': e.percentage,
             'completed_at': e.completed_at,
-        } for e in recent_exams]
+        } for e in online_exams]
+
+        # Recent handwritten exams (all statuses)
+        hw_exams = HandwrittenExam.objects.filter(
+            school=school,
+        ).select_related('subject', 'student').order_by('-created_at')[:10]
+
+        for h in hw_exams:
+            student_name = h.student_name or (h.student.get_full_name() if h.student else 'Unknown')
+            recent_data.append({
+                'id': h.id,
+                'type': 'handwritten',
+                'hw_status': h.status,
+                'student': student_name,
+                'student_id': h.student_id,
+                'subject': h.subject.name if h.subject else '',
+                'score': h.obtained_marks,
+                'total_marks': h.total_marks,
+                'percentage': h.percentage,
+                'completed_at': h.created_at,
+            })
+
+        # Sort combined list by date, take top 10
+        recent_data.sort(key=lambda x: x['completed_at'] or '', reverse=True)
+        recent_data = recent_data[:10]
+
+        # Assigned subjects for this teacher
+        assigned_subjects = []
+        if user.role == 'teacher':
+            seen = set()
+            for a in TeacherAssignment.objects.filter(teacher=user).select_related('subject'):
+                if a.subject.name not in seen:
+                    seen.add(a.subject.name)
+                    assigned_subjects.append({'id': a.subject.id, 'name': a.subject.name})
 
         return Response({
             'papers_count': papers_count,
@@ -932,6 +1141,7 @@ class TeacherDashboardStatsView(APIView):
             'pending_reviews': pending_reviews,
             'handwritten_graded': handwritten_graded,
             'recent_exams': recent_data,
+            'assigned_subjects': assigned_subjects,
         })
 
 
@@ -1114,8 +1324,8 @@ class HandwrittenExamListView(generics.ListAPIView):
         return HandwrittenExam.objects.filter(school=school).select_related('subject', 'teacher', 'student')
 
 
-class HandwrittenExamDetailView(generics.RetrieveAPIView):
-    """Get full detail including grading_data for a handwritten exam."""
+class HandwrittenExamDetailView(generics.RetrieveUpdateAPIView):
+    """Get full detail, or PATCH exam_category, for a handwritten exam."""
     serializer_class = HandwrittenExamSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1125,6 +1335,14 @@ class HandwrittenExamDetailView(generics.RetrieveAPIView):
             return HandwrittenExam.objects.filter(student=user).select_related('subject', 'teacher', 'student')
         school = user if user.role == 'school' else user.school
         return HandwrittenExam.objects.filter(school=school).select_related('subject', 'teacher', 'student')
+
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if 'exam_category' in request.data:
+            instance.exam_category = request.data['exam_category']
+            instance.save(update_fields=['exam_category'])
+        return Response({'id': instance.id, 'exam_category': instance.exam_category,
+                         'exam_category_display': instance.get_exam_category_display()})
 
 
 class StudentHandwrittenListView(generics.ListAPIView):
@@ -1191,12 +1409,13 @@ class PendingReviewListView(APIView):
             school=school,
             status='COMPLETED',
             grading_status__in=['PENDING_REVIEW', 'GRADING_MCQ', 'GRADING_DESCRIPTIVE', 'ANALYZING'],
-        ).select_related('user', 'subject').order_by('-completed_at')
+        ).select_related('user', 'subject', 'assigned_exam').order_by('-completed_at')
 
         data = [{
             'id': e.id,
             'student': e.user.get_full_name() or e.user.username,
             'subject': e.subject.name if e.subject else 'N/A',
+            'exam_title': e.assigned_exam.title if e.assigned_exam else None,
             'total_questions': e.total_questions,
             'completed_at': e.completed_at,
             'grading_status': e.grading_status,
@@ -1810,4 +2029,118 @@ class StudentAnalyticsView(APIView):
             'question_type_analysis': question_type_analysis,
             'recent_exams': recent_exams,
             'subjects': subjects,
+        })
+
+
+class ProgressCardView(generics.GenericAPIView):
+    """
+    Returns a student's exam results grouped by exam_category for the progress card.
+
+    - Student: GET /api/progress-card/  → own results
+    - Teacher/School: GET /api/progress-card/?student_id=<id>  → specific student
+
+    Optional filters: exam_category, date_from (YYYY-MM-DD), date_to, subject_id
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        User = get_user_model()
+
+        # Determine target student
+        if user.role in ('school', 'teacher'):
+            student_id = request.query_params.get('student_id')
+            if not student_id:
+                return Response({'error': 'student_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                student = User.objects.get(id=student_id, role='student')
+            except User.DoesNotExist:
+                return Response({'error': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+            # Permission check
+            school = user if user.role == 'school' else user.school
+            if student.school != school:
+                return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
+        else:
+            student = user
+
+        exam_category = request.query_params.get('exam_category')
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        subject_id = request.query_params.get('subject_id')
+
+        results = []
+
+        # --- Online (UserExam) results ---
+        ue_qs = UserExam.objects.filter(
+            user=student,
+            status='COMPLETED',
+            assigned_exam__isnull=False,
+        ).exclude(
+            assigned_exam__exam_category='',
+        ).select_related('subject', 'assigned_exam', 'subject__exam_type')
+
+        if exam_category:
+            ue_qs = ue_qs.filter(assigned_exam__exam_category=exam_category)
+        if date_from:
+            ue_qs = ue_qs.filter(completed_at__date__gte=date_from)
+        if date_to:
+            ue_qs = ue_qs.filter(completed_at__date__lte=date_to)
+        if subject_id:
+            ue_qs = ue_qs.filter(subject_id=subject_id)
+
+        for ue in ue_qs.order_by('subject__name', 'assigned_exam__exam_category', 'completed_at'):
+            results.append({
+                'source': 'online',
+                'subject_id': ue.subject_id,
+                'subject_name': ue.subject.name,
+                'exam_type_name': ue.subject.exam_type.name if ue.subject.exam_type_id else '',
+                'exam_category': ue.assigned_exam.exam_category,
+                'exam_category_display': ue.assigned_exam.get_exam_category_display(),
+                'title': ue.assigned_exam.title,
+                'score': ue.score,
+                'total_marks': ue.assigned_exam.total_marks,
+                'percentage': round(ue.percentage, 1),
+                'completed_at': ue.completed_at,
+            })
+
+        # --- Handwritten results ---
+        hw_qs = HandwrittenExam.objects.filter(
+            student=student,
+            status='GRADED',
+        ).exclude(
+            exam_category='',
+        ).select_related('subject', 'subject__exam_type')
+
+        if exam_category:
+            hw_qs = hw_qs.filter(exam_category=exam_category)
+        if date_from:
+            hw_qs = hw_qs.filter(created_at__date__gte=date_from)
+        if date_to:
+            hw_qs = hw_qs.filter(created_at__date__lte=date_to)
+        if subject_id:
+            hw_qs = hw_qs.filter(subject_id=subject_id)
+
+        for hw in hw_qs.order_by('subject__name', 'exam_category', 'created_at'):
+            results.append({
+                'source': 'handwritten',
+                'subject_id': hw.subject_id,
+                'subject_name': hw.subject.name,
+                'exam_type_name': hw.subject.exam_type.name if hw.subject.exam_type_id else '',
+                'exam_category': hw.exam_category,
+                'exam_category_display': hw.get_exam_category_display(),
+                'title': hw.title,
+                'score': hw.obtained_marks,
+                'total_marks': hw.total_marks,
+                'percentage': round(hw.percentage, 1) if hw.percentage is not None else 0,
+                'completed_at': hw.created_at,
+            })
+
+        return Response({
+            'student': {
+                'id': student.id,
+                'name': student.get_full_name() or student.username,
+                'grade': getattr(student, 'grade', '') or '',
+                'section': getattr(student, 'section', '') or '',
+            },
+            'results': results,
         })

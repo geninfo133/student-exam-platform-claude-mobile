@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import api from '../../api/axios';
+import { useAuth } from '../../context/AuthContext';
+import { getCategoriesForBoard } from '../../utils/examCategories';
 
 export default function CreateExam() {
   const navigate = useNavigate();
+  const { examId } = useParams();
+  const isEditMode = !!examId;
+  const { user } = useAuth();
   const [assignments, setAssignments] = useState([]);
   const [chapters, setChapters] = useState([]);
   const [students, setStudents] = useState([]);
@@ -27,6 +32,7 @@ export default function CreateExam() {
     num_short: 5,
     num_long: 4,
     student_ids: [],
+    exam_category: '',
     start_time: '',
     end_time: '',
   });
@@ -35,6 +41,10 @@ export default function CreateExam() {
   const [error, setError] = useState('');
   const [isCoaching, setIsCoaching] = useState(false);
   const [userRole, setUserRole] = useState('');
+  const [existingExams, setExistingExams] = useState([]);
+  const [templateLoading, setTemplateLoading] = useState(false);
+  const [templateQuestions, setTemplateQuestions] = useState([]);
+  const [templateMode, setTemplateMode] = useState('');  // 'random' or 'manual'
 
   // Fetch subjects - from assignments for teachers, from subjects API for school admins
   useEffect(() => {
@@ -56,6 +66,9 @@ export default function CreateExam() {
           const res = await api.get('/api/assignments/my/');
           setAssignments(res.data.results || res.data);
         }
+        // Fetch existing exams for template picker
+        const examRes = await api.get('/api/exams/assigned/');
+        setExistingExams(examRes.data.results || examRes.data);
       } catch (err) {
         console.error(err);
       } finally {
@@ -64,6 +77,40 @@ export default function CreateExam() {
     };
     fetchAssignments();
   }, []);
+
+  // In edit mode, fetch exam details and pre-fill form
+  useEffect(() => {
+    if (!isEditMode) return;
+    const fetchExam = async () => {
+      try {
+        const res = await api.get(`/api/exams/assigned/${examId}/`);
+        const d = res.data;
+        // Format datetimes for datetime-local input (strip timezone offset)
+        const fmtDt = (s) => s ? s.substring(0, 16) : '';
+        setForm({
+          title: d.title,
+          subject: String(d.subject),
+          chapter_ids: d.chapter_ids || [],
+          duration_minutes: d.duration_minutes,
+          total_marks: d.total_marks,
+          num_mcq: d.num_mcq,
+          num_short: d.num_short,
+          num_long: d.num_long,
+          student_ids: d.student_ids || [],
+          exam_category: d.exam_category || '',
+          start_time: fmtDt(d.start_time),
+          end_time: fmtDt(d.end_time),
+        });
+        setSelectionMode(d.selection_mode || 'random');
+        if (d.question_ids && d.question_ids.length > 0) {
+          setSelectedQuestionIds(d.question_ids);
+        }
+      } catch (err) {
+        console.error('Failed to load exam for editing', err);
+      }
+    };
+    fetchExam();
+  }, [examId, isEditMode]);
 
   // When subject changes, fetch chapters and students
   useEffect(() => {
@@ -166,6 +213,43 @@ export default function CreateExam() {
   // Get assignments for the currently selected subject
   const subjectAssignments = assignments.filter((a) => String(a.subject) === String(form.subject));
 
+  const handleLoadTemplate = async (examId) => {
+    if (!examId) {
+      setTemplateQuestions([]);
+      setTemplateMode('');
+      return;
+    }
+    setTemplateLoading(true);
+    try {
+      const res = await api.get(`/api/exams/assigned/${examId}/`);
+      const d = res.data;
+      setForm({
+        title: d.title + ' (Copy)',
+        subject: String(d.subject),
+        chapter_ids: d.chapter_ids || [],
+        duration_minutes: d.duration_minutes,
+        total_marks: d.total_marks,
+        num_mcq: d.num_mcq,
+        num_short: d.num_short,
+        num_long: d.num_long,
+        student_ids: d.student_ids || [],
+        exam_category: d.exam_category || '',
+        start_time: '',
+        end_time: '',
+      });
+      setSelectionMode(d.selection_mode || 'random');
+      setTemplateMode(d.selection_mode || 'random');
+      if (d.question_ids && d.question_ids.length > 0) {
+        setSelectedQuestionIds(d.question_ids);
+      }
+      setTemplateQuestions(d.questions || []);
+    } catch (err) {
+      console.error('Failed to load template', err);
+    } finally {
+      setTemplateLoading(false);
+    }
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
@@ -226,6 +310,7 @@ export default function CreateExam() {
         duration_minutes: parseInt(form.duration_minutes, 10),
         total_marks: selectionMode === 'manual' ? selectedTotalMarks : parseInt(form.total_marks, 10),
         student_ids: form.student_ids,
+        exam_category: form.exam_category,
         start_time: form.start_time,
         end_time: form.end_time,
         selection_mode: selectionMode,
@@ -242,7 +327,11 @@ export default function CreateExam() {
         payload.num_long = parseInt(form.num_long, 10);
       }
 
-      await api.post('/api/exams/assigned/create/', payload);
+      if (isEditMode) {
+        await api.patch(`/api/exams/assigned/${examId}/`, payload);
+      } else {
+        await api.post('/api/exams/assigned/create/', payload);
+      }
       navigate('/teacher/results');
     } catch (err) {
       setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to create exam. Please try again.');
@@ -280,12 +369,12 @@ export default function CreateExam() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-8">
       <div className="flex items-center gap-3 mb-6">
-        <Link to="/teacher/dashboard" className="text-gray-400 hover:text-gray-600 transition">
+        <Link to={isEditMode ? "/teacher/results" : "/teacher/dashboard"} className="text-gray-400 hover:text-gray-600 transition">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <h1 className="text-2xl font-bold text-gray-800">Create Exam</h1>
+        <h1 className="text-2xl font-bold text-gray-800">{isEditMode ? 'Edit Exam' : 'Create Exam'}</h1>
       </div>
 
       {assignments.length === 0 && (
@@ -299,6 +388,71 @@ export default function CreateExam() {
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
           <p className="text-red-700">{error}</p>
+        </div>
+      )}
+
+      {/* Template Picker — only shown in create mode */}
+      {!isEditMode && existingExams.length > 0 && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-6">
+          <p className="text-sm font-semibold text-indigo-800 mb-2">Copy from an existing exam paper</p>
+          <div className="flex gap-3 items-center">
+            <select
+              onChange={(e) => handleLoadTemplate(e.target.value)}
+              defaultValue=""
+              className="flex-1 px-3 py-2 border border-indigo-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            >
+              <option value="">-- Select an existing exam to use as template --</option>
+              {existingExams.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.title} ({e.subject_name})
+                </option>
+              ))}
+            </select>
+            {templateLoading && (
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600 shrink-0"></div>
+            )}
+          </div>
+          <p className="text-xs text-indigo-500 mt-1.5">Selecting an exam pre-fills the form below. You can edit before saving as a new exam.</p>
+
+          {/* Questions preview */}
+          {templateQuestions.length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-indigo-700 mb-2">
+                Questions in this exam ({templateQuestions.length})
+              </p>
+              <div className="border border-indigo-200 rounded-lg bg-white max-h-64 overflow-y-auto divide-y divide-gray-100">
+                {templateQuestions.map((q, idx) => (
+                  <div key={q.id} className="flex items-start gap-3 px-3 py-2.5">
+                    <span className="text-xs text-gray-400 mt-0.5 shrink-0 w-5">{idx + 1}.</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-gray-800 line-clamp-2">{q.question_text}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                          q.question_type === 'MCQ' ? 'bg-blue-100 text-blue-700' :
+                          q.question_type === 'SHORT' ? 'bg-green-100 text-green-700' :
+                          'bg-purple-100 text-purple-700'
+                        }`}>{q.question_type}</span>
+                        <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                          q.difficulty === 'EASY' ? 'bg-emerald-100 text-emerald-700' :
+                          q.difficulty === 'MEDIUM' ? 'bg-amber-100 text-amber-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>{q.difficulty}</span>
+                        {q.chapter_name && <span className="text-xs text-gray-400">{q.chapter_name}</span>}
+                        <span className="text-xs text-gray-400 ml-auto">{q.marks} mark(s)</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {templateMode === 'random' && templateQuestions.length === 0 && form.subject && (
+            <p className="text-xs text-indigo-500 mt-2">
+              This is a random-selection exam — questions are picked automatically from the question bank.
+              Distribution: {form.num_mcq} MCQ, {form.num_short} Short, {form.num_long} Long.
+            </p>
+          )}
         </div>
       )}
 
@@ -636,6 +790,27 @@ export default function CreateExam() {
           </>
         )}
 
+        {/* Exam Category — only shown when board has categories */}
+        {getCategoriesForBoard(user?.board).length > 0 && (
+          <div>
+            <label htmlFor="exam_category" className="block text-sm font-medium text-gray-700 mb-1">
+              Exam Category <span className="text-gray-400 font-normal">(for Progress Card)</span>
+            </label>
+            <select
+              id="exam_category"
+              name="exam_category"
+              value={form.exam_category}
+              onChange={handleChange}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+            >
+              <option value="">-- None / Not categorised --</option>
+              {getCategoriesForBoard(user?.board).map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Start & End Time */}
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -718,10 +893,10 @@ export default function CreateExam() {
           {loading ? (
             <span className="flex items-center justify-center gap-2">
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              Creating Exam...
+              {isEditMode ? 'Updating Exam...' : 'Creating Exam...'}
             </span>
           ) : (
-            'Create Exam'
+            isEditMode ? 'Update Exam' : 'Create Exam'
           )}
         </button>
       </form>
