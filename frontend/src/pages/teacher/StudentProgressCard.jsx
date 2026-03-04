@@ -89,26 +89,28 @@ export default function StudentProgressCard() {
     return name.includes(studentSearch.toLowerCase());
   });
 
-  /* ── Aggregate: best attempt per subject+category → sum per subject ── */
+  /* ── One row per subject+category (best attempt kept per pair) ── */
   const grid = {};
   for (const r of results) {
     const key = `${r.subject_id}_${r.exam_category}`;
     if (!grid[key] || r.percentage > grid[key].percentage) grid[key] = r;
   }
 
-  const subjectMap = {};
-  for (const r of Object.values(grid)) {
-    if (!subjectMap[r.subject_id]) {
-      subjectMap[r.subject_id] = { id: r.subject_id, name: r.subject_name, score: 0, total: 0, source: r.source };
-    }
-    subjectMap[r.subject_id].score += Number(r.score || 0);
-    subjectMap[r.subject_id].total += Number(r.total_marks || 0);
-  }
-
-  const rows = Object.values(subjectMap).map((s) => ({
-    ...s,
-    pct: s.total > 0 ? Math.round((s.score / s.total) * 100) : 0,
-  }));
+  const rows = Object.values(grid).map((r) => {
+    const score = Number(r.score || 0);
+    const total = Number(r.total_marks || 0);
+    // Show "Subject · Category" only when category label is present
+    const catLabel = r.exam_category_display || r.exam_category || '';
+    const name = catLabel ? `${r.subject_name}  ·  ${catLabel}` : r.subject_name;
+    return {
+      key:    `${r.subject_id}_${r.exam_category}`,
+      name,
+      score,
+      total,
+      pct:    total > 0 ? Math.round((score / total) * 100) : 0,
+      source: r.source,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
 
   const grandScore = rows.reduce((sum, r) => sum + r.score, 0);
   const grandTotal = rows.reduce((sum, r) => sum + r.total, 0);
@@ -294,7 +296,7 @@ export default function StudentProgressCard() {
                   {rows.map((row, idx) => {
                     const grade = gradeBadge(row.pct);
                     return (
-                      <tr key={row.id} className="hover:bg-slate-50/60 transition">
+                      <tr key={row.key} className="hover:bg-slate-50/60 transition">
                         <td className="px-5 py-4 text-gray-400 font-medium">{idx + 1}</td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
