@@ -103,7 +103,7 @@ function NavLink({ to, label, icon }) {
 }
 
 /* ── User menu (avatar + dropdown) ── */
-function UserMenu({ user, onLogout }) {
+function UserMenu({ user, onLogout, roleLabel }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useOutsideClick(ref, () => setOpen(false));
@@ -125,7 +125,7 @@ function UserMenu({ user, onLogout }) {
         )}
         <div className="hidden lg:block text-left">
           <p className="text-sm font-medium text-white leading-tight">{user?.first_name || user?.username}</p>
-          <p className="text-xs text-gray-400 leading-tight capitalize">{getRoleLabel()}</p>
+          <p className="text-xs text-gray-400 leading-tight capitalize">{roleLabel}</p>
         </div>
         <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -338,7 +338,7 @@ export default function Navbar() {
           {/* Right side: user menu or login/register */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             {user ? (
-              <UserMenu user={user} onLogout={handleLogout} />
+              <UserMenu user={user} onLogout={handleLogout} roleLabel={getRoleLabel()} />
             ) : (
               <>
                 <Link to="/login" className="text-gray-300 hover:text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-700 transition">
