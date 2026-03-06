@@ -338,7 +338,7 @@ export default function Navbar() {
           {/* Right side: user menu or login/register */}
           <div className="hidden md:flex items-center gap-2 shrink-0">
             {user ? (
-              <UserMenu user={user} onLogout={handleLogout} roleLabel={getRoleLabel()} />
+              <UserMenu user={user} onLogout={handleLogout} roleLabel={getOrgLabel()} />
             ) : (
               <>
                 <Link to="/login" className="text-gray-300 hover:text-white text-sm font-medium px-3 py-2 rounded-lg hover:bg-gray-700 transition">
