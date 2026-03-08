@@ -1,53 +1,90 @@
-# Competitive Exam Platform
+# Student Exam Platform — Backend
 
-A comprehensive Django-based online exam platform for competitive exams like NEET, JEE, EAMCET, ECET, NET, BANKING, and more.
-
-## Features
-
-- **Multiple Exam Types**: Support for various competitive exams
-- **Subject-wise Tests**: Choose specific subjects/papers for each exam
-- **Dynamic Question Display**: Questions displayed one by one during exam
-- **User Registration**: Complete registration with personal details and proof ID upload
-- **Secure Authentication**: Login/logout functionality
-- **Score Calculation**: Automatic score calculation with positive and negative marking
-- **Exam History**: Track all past exam attempts and scores
-- **Answer Review**: Detailed answer explanations after exam completion
-- **User Profile Management**: View and manage personal information
+A Django REST API powering a multi-role online exam platform for schools, coaching centres, teachers, and students. Supports AI-powered grading, handwritten answer sheet processing, and PDF-based question generation.
 
 ## Tech Stack
 
-- **Backend**: Python Django 5.0
+- **Framework**: Django 4.2.9 + Django REST Framework 3.14.0
+- **Auth**: JWT via djangorestframework-simplejwt
 - **Database**: PostgreSQL
-- **Frontend**: HTML, CSS (Responsive design)
-- **File Storage**: Local file system (can be upgraded to cloud storage)
+- **AI**: Anthropic Claude API (grading, question generation, exam analysis)
+- **PDF Processing**: pdfplumber, PyPDF
+- **Image Processing**: Pillow
+- **Production**: Gunicorn + WhiteNoise
+
+## Roles
+
+| Role | Description |
+|------|-------------|
+| `school` | Admin for a school/college/coaching centre — manages teachers, students, subjects |
+| `teacher` | Creates exams, grades answers, uploads papers, assigns exams to students |
+| `student` | Takes exams, views results and analytics, submits handwritten answer sheets |
+
+> Coaching centres use `role=school` with `org_type=coaching` and are routed to `/coaching/` in the frontend.
 
 ## Project Structure
 
 ```
-compititive/
-├── exam_platform/          # Main project settings
+backend/
+├── exam_platform/          # Django project settings & URL routing
 │   ├── settings.py
-│   ├── urls.py
+│   ├── urls.py             # 140+ API endpoint definitions
 │   └── wsgi.py
-├── accounts/               # User authentication app
-│   ├── models.py          # Custom User model
-│   ├── views.py           # Registration, login, profile
-│   ├── forms.py           # User registration form
-│   └── urls.py
-├── exams/                  # Exam management app
-│   ├── models.py          # ExamType, Subject, Question, UserExam, UserAnswer
-│   ├── views.py           # Exam flow views
-│   ├── admin.py           # Django admin configuration
-│   └── urls.py
-├── templates/              # HTML templates
-│   ├── base.html
-│   ├── accounts/
-│   └── exams/
-├── static/                 # CSS, JS, images
-├── media/                  # User uploaded files
+├── accounts/               # User auth & management
+│   ├── models.py           # Extended User model (role, org_type, school FK)
+│   ├── api_views.py        # Register, login, profile, member management
+│   └── permissions.py      # Role-based permission classes
+├── exams/                  # Core exam functionality
+│   ├── models.py           # ExamType, Subject, Chapter, Question, UserExam, UserAnswer, etc.
+│   ├── api_views.py        # 50+ endpoints (2000+ lines)
+│   ├── grading.py          # AI grading logic (MCQ + descriptive)
+│   ├── handwritten_processor.py  # AI grading of handwritten sheets
+│   └── paper_generator.py  # Question extraction from PDF papers
+├── study_material/         # Study materials & key concepts
+│   ├── models.py
+│   └── api_views.py
+├── media/                  # Uploaded files (PDFs, images, answer sheets)
 ├── manage.py
 └── requirements.txt
 ```
+
+## Key Features
+
+- **Multi-tenant**: Schools/coaching centres manage their own teachers and students
+- **AI Grading**: MCQ auto-grading + Claude AI for short/long answer descriptive grading
+- **Handwritten Sheets**: Upload and AI-grade handwritten answer sheets
+- **PDF Question Generation**: Upload exam papers → AI extracts and creates questions
+- **Exam Assignment**: Teachers assign specific exams to students
+- **Progress Tracking**: Exam history, analytics, progress cards (pre-mid, mid, annual)
+- **Study Materials**: Teachers upload materials with key concepts per chapter
+- **Role-based APIs**: Permissions enforced per endpoint (IsSchoolUser, IsTeacherUser, etc.)
+
+## Exam Grading Workflow
+
+```
+UserExam created → MCQ auto-graded → Descriptive AI-graded → Teacher review → Analysis generated
+Status: NOT_STARTED → GRADING_MCQ → GRADING_DESCRIPTIVE → PENDING_REVIEW → ANALYZING → COMPLETED
+```
+
+## API Overview
+
+**Auth:** `POST /api/auth/register/` · `POST /api/auth/login/` · `POST /api/auth/refresh/` · `GET|PATCH /api/auth/profile/`
+
+**School — User Management:** `POST /api/auth/create-teacher/` · `POST /api/auth/create-student/` · `GET /api/auth/members/` · `PATCH|DELETE /api/auth/members/<id>/`
+
+**Exam Structure:** `/api/exam-types/` · `/api/subjects/` · `/api/chapters/`
+
+**Student — Taking Exams:** `POST /api/exams/generate/` · `POST /api/exams/<id>/answer/` · `POST /api/exams/<id>/submit/` · `GET /api/exams/<id>/result/` · `GET /api/exams/history/`
+
+**Teacher — Papers & Exams:** `POST /api/exams/papers/upload/` · `POST /api/exams/papers/<id>/generate/` · `POST /api/exams/assigned/create/` · `GET /api/exams/assigned/<id>/submissions/`
+
+**Grading:** `GET /api/exams/pending-review/` · `POST /api/exams/<id>/grade/` · `POST /api/exams/<id>/analyze/`
+
+**Handwritten:** `POST /api/handwritten/upload/` · `POST /api/handwritten/<id>/process/` · `GET /api/handwritten/my/`
+
+**Analytics:** `GET /api/dashboard/teacher/` · `GET /api/dashboard/school/` · `GET /api/analytics/student/` · `GET /api/progress-card/`
+
+**Study Materials:** `GET|POST /api/study-materials/` · `PATCH|DELETE /api/study-materials/<id>/`
 
 ## Installation
 
@@ -55,19 +92,20 @@ compititive/
 
 - Python 3.10+
 - PostgreSQL 14+
-- pip
+- Anthropic API key
 
-### Setup Steps
+### Setup
 
-1. **Clone or navigate to the project directory**
+1. **Clone the repo**
    ```bash
-   cd /Users/hani/compititive
+   git clone git@github.com:geninfo133/student-exam-platform.git
+   cd student-exam-platform/backend
    ```
 
-2. **Create a virtual environment**
+2. **Create virtual environment**
    ```bash
    python -m venv venv
-   source venv/bin/activate  # On macOS/Linux
+   source venv/bin/activate  # macOS/Linux
    ```
 
 3. **Install dependencies**
@@ -75,134 +113,61 @@ compititive/
    pip install -r requirements.txt
    ```
 
-4. **Configure PostgreSQL Database**
-   
-   Create a PostgreSQL database:
+4. **Configure environment**
+
+   Create a `.env` file in the `backend/` directory:
+   ```env
+   ANTHROPIC_API_KEY=your_anthropic_api_key
+   DATABASE_URL=postgresql://user:password@localhost:5432/exam_platform_db
+   ```
+
+5. **Create PostgreSQL database**
    ```bash
-   psql -U postgres
-   CREATE DATABASE exam_platform_db;
+   psql -U postgres -c "CREATE DATABASE exam_platform_db;"
    ```
 
-   Update database credentials in `exam_platform/settings.py`:
-   ```python
-   DATABASES = {
-       'default': {
-           'ENGINE': 'django.db.backends.postgresql',
-           'NAME': 'exam_platform_db',
-           'USER': 'postgres',
-           'PASSWORD': 'your_password',  # Change this
-           'HOST': 'localhost',
-           'PORT': '5432',
-       }
-   }
-   ```
-
-5. **Run migrations**
+6. **Run migrations**
    ```bash
    python manage.py makemigrations
    python manage.py migrate
    ```
 
-6. **Create superuser (admin)**
+7. **Create superuser**
    ```bash
    python manage.py createsuperuser
    ```
 
-7. **Run the development server**
+8. **Start development server**
    ```bash
-   python manage.py runserver
+   python manage.py runserver 8001
    ```
 
-8. **Access the application**
-   - Main site: http://127.0.0.1:8000/
-   - Admin panel: http://127.0.0.1:8000/admin/
+   API base: `http://localhost:8001/api/`
+   Admin panel: `http://localhost:8001/admin/`
 
-## Adding Sample Data
+## Environment Variables
 
-Login to the admin panel and add:
-
-1. **Exam Types**: NEET, JEE, EAMCET, ECET, NET, BANKING
-2. **Subjects**: For each exam type (e.g., Physics, Chemistry, Biology for NEET)
-3. **Questions**: Add questions with options and correct answers
+| Variable | Description |
+|----------|-------------|
+| `ANTHROPIC_API_KEY` | Claude API key for AI grading & question generation |
+| `DATABASE_URL` | PostgreSQL connection string |
 
 ## Database Models
 
-### User Model
-- Extended Django User with additional fields
-- Phone number, DOB, address
-- Proof ID type, number, and document upload
-
-### ExamType
-- Name, code, description
-- Examples: NEET, JEE, EAMCET
-
-### Subject
-- Related to ExamType
-- Duration, total marks
-- Examples: Physics, Chemistry, Mathematics
-
-### Question
-- Related to Subject
-- Question text, 4 options (A, B, C, D)
-- Correct answer, explanation
-- Marks and negative marks
-- Difficulty level
-
-### UserExam
-- Tracks user exam attempts
-- Status: NOT_STARTED, IN_PROGRESS, COMPLETED
-- Stores score, percentage, statistics
-
-### UserAnswer
-- Individual answers for each question
-- Selected answer, correctness
-- Marks obtained
-
-## Usage Flow
-
-1. **Registration**: User registers with personal details and uploads proof ID
-2. **Login**: User logs in with credentials
-3. **Dashboard**: View available exams and history
-4. **Select Exam Type**: Choose exam (NEET, JEE, etc.)
-5. **Select Subject**: Choose subject/paper
-6. **Take Exam**: Answer questions one by one
-7. **Submit**: Submit exam and view results
-8. **View Results**: See score, percentage, and answer review
-9. **History**: Access all past exam attempts
-
-## Admin Features
-
-Admin can:
-- Manage users
-- Add/edit exam types
-- Add/edit subjects
-- Add/edit questions
-- View all user exams and answers
-- Monitor platform usage
-
-## Security Features
-
-- Password hashing
-- CSRF protection
-- Login required decorators
-- File upload validation
-- SQL injection protection (ORM)
-
-## Future Enhancements
-
-- Timer functionality for exams
-- Question randomization
-- Category-wise performance analytics
-- PDF certificate generation
-- Email notifications
-- Payment integration
-- Mobile app
-- Real-time leaderboards
+- **User** — Extended AbstractUser with `role`, `org_type`, `school` FK, grade, section, phone, DOB
+- **ExamType** — Top-level exam category (e.g. NEET, JEE, EAMCET)
+- **Subject** — Belongs to ExamType; has duration and total marks
+- **Chapter** — Belongs to Subject
+- **Question** — MCQ / short answer / long answer; difficulty level; marks + negative marks
+- **UserExam** — A student's exam attempt; tracks grading status and score
+- **UserAnswer** — Individual answer per question; stores AI and teacher grades
+- **ExamAnalysis** — AI-generated post-exam analysis (strengths, weaknesses, percentile)
+- **ExamPaper** — Uploaded PDF for question generation
+- **AssignedExam** — Teacher assigns an exam to a group of students
+- **HandwrittenExam** — Uploaded handwritten answer sheet for AI grading
+- **TeacherAssignment** — Maps a teacher to a subject, grade, and section
+- **StudyMaterial** — Material uploaded by teacher per chapter/subject
 
 ## License
 
-This project is open source and available for educational purposes.
-
-## Contact
-
-For questions or support, contact the development team.
+Open source — available for educational use.
