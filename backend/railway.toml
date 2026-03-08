@@ -1,0 +1,7 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "gunicorn exam_platform.wsgi --log-file -"
+healthcheckPath = "/admin/"
+restartPolicyType = "on_failure"
