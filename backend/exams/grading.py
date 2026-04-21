@@ -34,15 +34,15 @@ def grade_descriptive_with_ai(user_answer):
         user_answer.save()
         return
 
-    api_key = settings.ANTHROPIC_API_KEY
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
         # Fallback: give partial marks based on answer length
         _fallback_grade(user_answer)
         return
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        from google import genai
+        client = genai.Client(api_key=api_key)
 
         max_marks = question.marks
         prompt = f"""You are grading a student's answer for a 10th standard exam.
@@ -64,13 +64,18 @@ Grade this answer and respond with ONLY valid JSON:
     "key_points_missed": ["<list of key points the student missed>"]
 }}"""
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}],
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=prompt,
         )
 
-        response_text = message.content[0].text.strip()
+        response_text = response.text.strip()
+        if response_text.startswith('```'):
+            response_text = response_text[response_text.find('\n') + 1:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+
         # Parse JSON from response
         result = json.loads(response_text)
 

@@ -117,7 +117,7 @@ Status: NOT_STARTED → GRADING_MCQ → GRADING_DESCRIPTIVE → PENDING_REVIEW �
 
    Create a `.env` file in the `backend/` directory:
    ```env
-   ANTHROPIC_API_KEY=your_anthropic_api_key
+   GEMINI_API_KEY=your_anthropic_api_key
    DATABASE_URL=postgresql://user:password@localhost:5432/exam_platform_db
    ```
 
@@ -149,7 +149,7 @@ Status: NOT_STARTED → GRADING_MCQ → GRADING_DESCRIPTIVE → PENDING_REVIEW �
 
 | Variable | Description |
 |----------|-------------|
-| `ANTHROPIC_API_KEY` | Claude API key for AI grading & question generation |
+| `GEMINI_API_KEY` | Claude API key for AI grading & question generation |
 | `DATABASE_URL` | PostgreSQL connection string |
 
 ## Database Models

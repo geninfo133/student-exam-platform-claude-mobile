@@ -55,15 +55,16 @@ def generate_questions_from_paper(exam_paper_id):
             exam_paper.extracted_text = text
             exam_paper.save()
 
-    api_key = settings.ANTHROPIC_API_KEY
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
-        exam_paper.generation_error = 'Anthropic API key not configured.'
+        exam_paper.generation_error = 'Gemini API key not configured.'
         exam_paper.save()
         return
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=api_key)
 
         prompt_text = f"""You are a question paper generator for 10th standard students.
 
@@ -128,30 +129,27 @@ Respond with ONLY valid JSON (no markdown):
         # Build message content — use PDF directly if text extraction failed
         if exam_paper.extracted_text and len(exam_paper.extracted_text.strip()) > 50:
             # Text-based PDF: send extracted text
-            content = [{"type": "text", "text": f"Exam Paper Content:\n---\n{exam_paper.extracted_text[:8000]}\n---\n\n{prompt_text}"}]
+            content = [f"Exam Paper Content:\n---\n{exam_paper.extracted_text[:8000]}\n---\n\n{prompt_text}"]
         else:
             # Scanned/image PDF: send PDF directly to Claude's vision
             with open(exam_paper.file.path, 'rb') as f:
-                pdf_data = base64.standard_b64encode(f.read()).decode('utf-8')
+                pdf_data = f.read()
             content = [
-                {
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": pdf_data,
-                    },
-                },
-                {"type": "text", "text": prompt_text},
+                types.Part.from_bytes(data=pdf_data, mime_type='application/pdf'),
+                prompt_text,
             ]
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=8000,
-            messages=[{"role": "user", "content": content}],
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=content,
         )
 
-        response_text = message.content[0].text.strip()
+        response_text = response.text.strip()
+        if response_text.startswith('```'):
+            response_text = response_text[response_text.find('\n') + 1:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
         result = json.loads(response_text)
         questions_data = result.get('questions', [])
 
@@ -220,7 +218,7 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
             # Scanned PDF: read as binary for vision API
             try:
                 with open(paper.file.path, 'rb') as f:
-                    pdf_data = base64.standard_b64encode(f.read()).decode('utf-8')
+                    pdf_data = f.read()
                 pdf_documents.append({'title': paper.title, 'data': pdf_data})
             except Exception as e:
                 logger.error(f"Failed to read PDF {paper.title}: {e}")
@@ -228,13 +226,14 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
     if not all_texts and not pdf_documents:
         return {'success': False, 'error': 'Could not process any of the uploaded papers.'}
 
-    api_key = settings.ANTHROPIC_API_KEY
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
-        return {'success': False, 'error': 'Anthropic API key not configured.'}
+        return {'success': False, 'error': 'Gemini API key not configured.'}
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=api_key)
 
         prompt_text = f"""You are an expert question paper creator for 10th standard students.
 
@@ -305,25 +304,26 @@ Respond with ONLY valid JSON (no markdown):
         # Build message content with PDFs and/or extracted text
         content = []
         for doc in pdf_documents:
-            content.append({
-                "type": "document",
-                "source": {"type": "base64", "media_type": "application/pdf", "data": doc['data']},
-            })
+            content.append(types.Part.from_bytes(data=doc['data'], mime_type='application/pdf'))
         if all_texts:
             combined_text = '\n\n'.join(all_texts)
             if len(combined_text) > 15000:
                 per_paper = 15000 // len(all_texts)
                 combined_text = '\n\n'.join(t[:per_paper] for t in all_texts)
-            content.append({"type": "text", "text": f"=== EXTRACTED TEXT FROM PAPERS ===\n{combined_text}"})
-        content.append({"type": "text", "text": prompt_text})
+            content.append(f"=== EXTRACTED TEXT FROM PAPERS ===\n{combined_text}")
+        content.append(prompt_text)
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=8000,
-            messages=[{"role": "user", "content": content}],
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=content,
         )
 
-        response_text = message.content[0].text.strip()
+        response_text = response.text.strip()
+        if response_text.startswith('```'):
+            response_text = response_text[response_text.find('\n') + 1:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
         result = json.loads(response_text)
         questions_data = result.get('questions', [])
 
@@ -387,13 +387,13 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
 
     chapter_names = ', '.join(ch.name for ch in chapters) if chapters else 'All chapters'
 
-    api_key = settings.ANTHROPIC_API_KEY
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
-        return {'success': False, 'error': 'Anthropic API key not configured.'}
+        return {'success': False, 'error': 'Gemini API key not configured.'}
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        from google import genai
+        client = genai.Client(api_key=api_key)
 
         prompt = f"""You are an expert question paper creator for 10th standard students.
 
@@ -464,13 +464,17 @@ Respond with ONLY valid JSON (no markdown):
   ]
 }}"""
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=8000,
-            messages=[{"role": "user", "content": prompt}],
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=prompt,
         )
 
-        response_text = message.content[0].text.strip()
+        response_text = response.text.strip()
+        if response_text.startswith('```'):
+            response_text = response_text[response_text.find('\n') + 1:]
+            if response_text.endswith('```'):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
         result = json.loads(response_text)
         questions_data = result.get('questions', [])
 

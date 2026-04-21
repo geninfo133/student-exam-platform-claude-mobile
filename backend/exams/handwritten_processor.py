@@ -16,28 +16,20 @@ logger = logging.getLogger(__name__)
 
 
 def _encode_file(file_field):
-    """Read a file and return (base64_data, media_type)."""
+    """Read a file and return (raw_bytes, media_type)."""
     path = file_field.path
     mime, _ = mimetypes.guess_type(path)
     if not mime:
         mime = 'application/octet-stream'
     with open(path, 'rb') as f:
-        data = base64.standard_b64encode(f.read()).decode('utf-8')
+        data = f.read()
     return data, mime
 
 
 def _build_document_block(data, media_type):
-    """Build a Claude API content block for a document or image."""
-    if media_type == 'application/pdf':
-        return {
-            "type": "document",
-            "source": {"type": "base64", "media_type": media_type, "data": data},
-        }
-    # Image types (jpeg, png, gif, webp)
-    return {
-        "type": "image",
-        "source": {"type": "base64", "media_type": media_type, "data": data},
-    }
+    """Build a Gemini API Part for a document or image."""
+    from google.genai import types
+    return types.Part.from_bytes(data=data, mime_type=media_type)
 
 
 def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
@@ -61,16 +53,16 @@ def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
     exam.error_message = ''
     exam.save()
 
-    api_key = settings.ANTHROPIC_API_KEY
+    api_key = settings.GEMINI_API_KEY
     if not api_key:
         exam.status = 'FAILED'
-        exam.error_message = 'Anthropic API key not configured.'
+        exam.error_message = 'Gemini API key not configured.'
         exam.save()
         return
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
+        from google import genai
+        client = genai.Client(api_key=api_key)
 
         # Encode both files
         qp_data, qp_mime = _encode_file(exam.question_paper)
@@ -156,19 +148,18 @@ IMPORTANT:
 
         content = [
             _build_document_block(qp_data, qp_mime),
-            {"type": "text", "text": "Above is the QUESTION PAPER / ANSWER KEY."},
+            "Above is the QUESTION PAPER / ANSWER KEY.",
             _build_document_block(ans_data, ans_mime),
-            {"type": "text", "text": "Above is the STUDENT'S HANDWRITTEN ANSWER SHEET."},
-            {"type": "text", "text": prompt_text},
+            "Above is the STUDENT'S HANDWRITTEN ANSWER SHEET.",
+            prompt_text,
         ]
 
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=8000,
-            messages=[{"role": "user", "content": content}],
+        response = client.models.generate_content(
+            model="gemini-2.5-pro",
+            contents=content,
         )
 
-        response_text = message.content[0].text.strip()
+        response_text = response.text.strip()
         # Strip markdown code fences e.g. ```json ... ```
         if response_text.startswith('```'):
             # Remove opening fence + optional language tag

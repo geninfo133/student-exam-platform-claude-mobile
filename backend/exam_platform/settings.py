@@ -78,11 +78,11 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'student_exam_db',
-            'USER': os.environ.get('DB_USER', 'mohan'),
+            'NAME': os.environ.get('DB_NAME', 'student-exam-db'),
+            'USER': os.environ.get('DB_USER', 'hani'),
             'PASSWORD': os.environ.get('DB_PASSWORD', ''),
-            'HOST': 'localhost',
-            'PORT': '5432',
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
         }
     }
 
@@ -141,8 +141,8 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# Anthropic
-ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+# Gemini
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 
 # Login URLs (for template-based views)
 LOGIN_URL = '/accounts/login/'
