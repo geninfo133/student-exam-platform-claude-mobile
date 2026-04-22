@@ -38,50 +38,44 @@ User = get_user_model()
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def check_ai_settings(request):
-    """Extremely detailed diagnostic to force server update verification."""
+    """Master Diagnostic Tool to map the database state."""
     import google.generativeai as genai
-    api_key = settings.GEMINI_API_KEY
-    
-    available_models = []
-    error = None
-    library_version = "Unknown"
-    try:
-        import pkg_resources
-        library_version = pkg_resources.get_distribution("google-generativeai").version
-    except:
-        pass
-
-    try:
-        if api_key:
-            genai.configure(api_key=api_key)
-            for m in genai.list_models():
-                available_models.append({
-                    'name': m.name,
-                    'methods': m.supported_generation_methods
-                })
-        else:
-            error = "API Key missing in environment"
-    except Exception as e:
-        error = str(e)
-
-    # Count questions for this user/school
     user = request.user
-    q_count = 0
-    total_q = Question.objects.all().count()
     
+    # 1. User/School Map
+    user_info = {
+        "is_logged_in": user.is_authenticated,
+        "username": user.username if user.is_authenticated else "None",
+        "role": getattr(user, 'role', 'None'),
+        "user_id": user.id if user.is_authenticated else "None",
+    }
+    
+    school_obj = None
     if user.is_authenticated:
-        school = user if user.role == 'school' else getattr(user, 'school', None)
-        if school:
-            q_count = Question.objects.filter(school=school).count()
+        school_obj = user if user.role == 'school' else getattr(user, 'school', None)
+    
+    user_info["school_id_detected"] = school_obj.id if school_obj else "None"
+
+    # 2. Question Map
+    from .models import Question, Subject
+    all_questions = Question.objects.all()
+    q_by_school = {}
+    for q in all_questions:
+        sid = str(q.school_id)
+        q_by_school[sid] = q_by_school.get(sid, 0) + 1
+        
+    q_by_subject = {}
+    for q in all_questions:
+        sub_name = q.subject.name if q.subject else "No Subject"
+        q_by_subject[sub_name] = q_by_subject.get(sub_name, 0) + 1
 
     return Response({
-        'diagnostic_version': '5.0-FINAL',
-        'library': 'google-generativeai',
-        'model_configured': 'models/gemini-2.0-flash',
-        'questions_in_your_school': q_count,
-        'total_questions_in_db': total_q,
-        'available_models_list': available_models,
-        'timestamp': timezone.now()
+        "diagnostic_version": "6.0-MASTER",
+        "user_context": user_info,
+        "questions_count_by_school_id": q_by_school,
+        "questions_count_by_subject_name": q_by_subject,
+        "total_questions_in_system": all_questions.count(),
+        "timestamp": timezone.now()
     })
 
 
