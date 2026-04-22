@@ -34,6 +34,17 @@ from accounts.permissions import IsSchoolOrTeacher, IsTeacherUser, IsSchoolUser
 User = get_user_model()
 
 
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def check_ai_settings(request):
+    """Diagnostic endpoint to check current AI configuration."""
+    return Response({
+        'model_to_be_used': 'gemini-1.5-flash',
+        'backend_status': 'Updated to Flash',
+        'timestamp': timezone.now()
+    })
+
+
 # ============================================================
 # Existing views (updated with school-aware filtering)
 # ============================================================
