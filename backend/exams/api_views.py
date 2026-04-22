@@ -68,7 +68,7 @@ def check_ai_settings(request):
         'diagnostic_version': '4.0-DETAILED',
         'library': 'google-generativeai',
         'library_version': library_version,
-        'model_configured': 'models/gemini-1.5-flash',
+        'model_configured': 'models/gemini-2.0-flash',
         'available_models_count': len(available_models),
         'available_models_list': available_models,
         'error_log': error,

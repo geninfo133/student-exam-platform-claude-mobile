@@ -148,5 +148,5 @@ GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/exams/dashboard/'
 LOGOUT_REDIRECT_URL = '/'
-# Forced rebuild to ensure gemini-1.5-flash is used everywhere
+# Forced rebuild to ensure gemini-2.0-flash is used everywhere
 # Stability update: Switched to google-generativeai stable library
