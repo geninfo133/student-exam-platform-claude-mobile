@@ -35,6 +35,35 @@ from accounts.permissions import IsSchoolOrTeacher, IsTeacherUser, IsSchoolUser
 User = get_user_model()
 
 
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def trigger_data_cleanup(request):
+    """Trigger the removal of global sample data via URL."""
+    from .models import Question, Chapter, Subject, UserAnswer
+    
+    global_subjects = Subject.objects.filter(school__isnull=True)
+    global_sub_ids = list(global_subjects.values_list('id', flat=True))
+    
+    # 1. Delete dependent data
+    ua_count = UserAnswer.objects.filter(question__subject_id__in=global_sub_ids).delete()[0]
+    q_count = Question.objects.filter(subject_id__in=global_sub_ids).delete()[0]
+    c_count = Chapter.objects.filter(subject_id__in=global_sub_ids).delete()[0]
+    
+    # 2. Delete Subjects
+    s_names = list(global_subjects.values_list('name', flat=True))
+    global_subjects.delete()
+
+    return Response({
+        "status": "Cleanup Successful",
+        "deleted": {
+            "user_answers": ua_count,
+            "questions": q_count,
+            "chapters": c_count,
+            "subjects": s_names
+        }
+    })
+
+
 # ============================================================
 # Existing views (updated with school-aware filtering)
 # ============================================================
