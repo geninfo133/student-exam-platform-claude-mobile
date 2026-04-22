@@ -140,7 +140,7 @@ Respond with ONLY valid JSON (no markdown):
             ]
 
         response = client.models.generate_content(
-            model="gemini-1.5-pro",
+            model="gemini-1.5-flash",
             contents=content,
         )
 
@@ -314,7 +314,7 @@ Respond with ONLY valid JSON (no markdown):
         content.append(prompt_text)
 
         response = client.models.generate_content(
-            model="gemini-1.5-pro",
+            model="gemini-1.5-flash",
             contents=content,
         )
 
@@ -465,7 +465,7 @@ Respond with ONLY valid JSON (no markdown):
 }}"""
 
         response = client.models.generate_content(
-            model="gemini-1.5-pro",
+            model="gemini-1.5-flash",
             contents=prompt,
         )
 
