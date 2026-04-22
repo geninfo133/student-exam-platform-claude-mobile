@@ -27,9 +27,8 @@ def _encode_file(file_field):
 
 
 def _build_document_block(data, media_type):
-    """Build a Gemini API Part for a document or image."""
-    from google.genai import types
-    return types.Part.from_bytes(data=data, mime_type=media_type)
+    """Build a Gemini API dict for a document or image."""
+    return {"mime_type": media_type, "data": data}
 
 
 def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
@@ -61,8 +60,9 @@ def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
         return
 
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         # Encode both files
         qp_data, qp_mime = _encode_file(exam.question_paper)
@@ -154,10 +154,7 @@ IMPORTANT:
             prompt_text,
         ]
 
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=content,
-        )
+        response = model.generate_content(content)
 
         response_text = response.text.strip()
         # Strip markdown code fences e.g. ```json ... ```

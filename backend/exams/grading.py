@@ -41,8 +41,9 @@ def grade_descriptive_with_ai(user_answer):
         return
 
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         max_marks = question.marks
         prompt = f"""You are grading a student's answer for a 10th standard exam.
@@ -64,10 +65,7 @@ Grade this answer and respond with ONLY valid JSON:
     "key_points_missed": ["<list of key points the student missed>"]
 }}"""
 
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt,
-        )
+        response = model.generate_content(prompt)
 
         response_text = response.text.strip()
         if response_text.startswith('```'):

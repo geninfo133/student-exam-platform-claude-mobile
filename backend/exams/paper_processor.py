@@ -62,9 +62,9 @@ def generate_questions_from_paper(exam_paper_id):
         return
 
     try:
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=api_key)
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt_text = f"""You are a question paper generator for 10th standard students.
 
@@ -131,18 +131,15 @@ Respond with ONLY valid JSON (no markdown):
             # Text-based PDF: send extracted text
             content = [f"Exam Paper Content:\n---\n{exam_paper.extracted_text[:8000]}\n---\n\n{prompt_text}"]
         else:
-            # Scanned/image PDF: send PDF directly to Claude's vision
+            # Scanned/image PDF: send PDF directly
             with open(exam_paper.file.path, 'rb') as f:
                 pdf_data = f.read()
             content = [
-                types.Part.from_bytes(data=pdf_data, mime_type='application/pdf'),
+                {'mime_type': 'application/pdf', 'data': pdf_data},
                 prompt_text,
             ]
 
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=content,
-        )
+        response = model.generate_content(content)
 
         response_text = response.text.strip()
         if response_text.startswith('```'):
@@ -215,7 +212,7 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
         if paper.extracted_text and len(paper.extracted_text.strip()) > 50:
             all_texts.append(f"--- Paper: {paper.title} ---\n{paper.extracted_text}")
         else:
-            # Scanned PDF: read as binary for vision API
+            # Scanned PDF: read as binary
             try:
                 with open(paper.file.path, 'rb') as f:
                     pdf_data = f.read()
@@ -231,9 +228,9 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
         return {'success': False, 'error': 'Gemini API key not configured.'}
 
     try:
-        from google import genai
-        from google.genai import types
-        client = genai.Client(api_key=api_key)
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt_text = f"""You are an expert question paper creator for 10th standard students.
 
@@ -304,7 +301,7 @@ Respond with ONLY valid JSON (no markdown):
         # Build message content with PDFs and/or extracted text
         content = []
         for doc in pdf_documents:
-            content.append(types.Part.from_bytes(data=doc['data'], mime_type='application/pdf'))
+            content.append({'mime_type': 'application/pdf', 'data': doc['data']})
         if all_texts:
             combined_text = '\n\n'.join(all_texts)
             if len(combined_text) > 15000:
@@ -313,10 +310,7 @@ Respond with ONLY valid JSON (no markdown):
             content.append(f"=== EXTRACTED TEXT FROM PAPERS ===\n{combined_text}")
         content.append(prompt_text)
 
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=content,
-        )
+        response = model.generate_content(content)
 
         response_text = response.text.strip()
         if response_text.startswith('```'):
@@ -392,8 +386,9 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
         return {'success': False, 'error': 'Gemini API key not configured.'}
 
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt = f"""You are an expert question paper creator for 10th standard students.
 
@@ -464,10 +459,7 @@ Respond with ONLY valid JSON (no markdown):
   ]
 }}"""
 
-        response = client.models.generate_content(
-            model="gemini-1.5-flash",
-            contents=prompt,
-        )
+        response = model.generate_content(prompt)
 
         response_text = response.text.strip()
         if response_text.startswith('```'):
