@@ -75,11 +75,11 @@ def generate_questions_from_paper(exam_paper_id):
         for q in data.get('questions', []):
             Question.objects.create(
                 subject=exam_paper.subject, school=exam_paper.school,
-                question_type=q['question_type'], question_text=q['question_text'],
+                question_type=q['question_type'].upper(), question_text=q['question_text'],
                 option_a=q.get('option_a',''), option_b=q.get('option_b',''),
                 option_c=q.get('option_c',''), option_d=q.get('option_d',''),
                 correct_answer=q.get('correct_answer',''), model_answer=q.get('model_answer',''),
-                marks=q.get('marks', 1), difficulty=q.get('difficulty','MEDIUM')
+                marks=q.get('marks', 1), difficulty=q.get('difficulty','MEDIUM').upper()
             )
         exam_paper.questions_generated = True
         exam_paper.save()
