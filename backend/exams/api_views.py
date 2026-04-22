@@ -681,8 +681,17 @@ class TeacherQuestionListView(generics.ListAPIView):
         if not subject_id:
             return Question.objects.none()
 
+        # Get the subject name to allow matching global questions
+        try:
+            target_subject = Subject.objects.get(id=subject_id)
+            subject_name = target_subject.name
+        except Subject.DoesNotExist:
+            return Question.objects.none()
+
+        # Match by specific ID OR by subject name (to include global questions)
         qs = Question.objects.filter(
-            subject_id=subject_id, is_active=True,
+            Q(subject_id=subject_id) | Q(subject__name=subject_name),
+            is_active=True,
         ).filter(
             Q(school=school) | Q(school__isnull=True)
         ).select_related('chapter')
