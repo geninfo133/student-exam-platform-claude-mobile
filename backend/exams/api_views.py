@@ -508,13 +508,16 @@ class GenerateQuestionsFromPaperView(APIView):
         if paper.questions_generated:
             return Response({'error': 'Questions already generated for this paper'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Run in background
+        # Run generation (waiting for result to ensure completion on Free Tier)
         from .paper_processor import generate_questions_from_paper
-        thread = threading.Thread(target=generate_questions_from_paper, args=(paper.id,))
-        thread.daemon = True
-        thread.start()
+        generate_questions_from_paper(paper.id)
 
-        return Response({'message': 'Question generation started', 'paper_id': paper.id})
+        # Refresh paper to check for errors
+        paper.refresh_from_db()
+        if paper.generation_error:
+            return Response({'error': paper.generation_error}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({'message': 'Question generation completed successfully', 'paper_id': paper.id})
 
 
 # ============================================================
@@ -537,27 +540,26 @@ class CreatePaperFromPapersView(APIView):
             return Response({'error': 'Subject not found'}, status=status.HTTP_404_NOT_FOUND)
 
         from .paper_processor import generate_paper_from_multiple
-        thread = threading.Thread(
-            target=generate_paper_from_multiple,
-            kwargs={
-                'paper_ids': serializer.validated_data['paper_ids'],
-                'instructions': serializer.validated_data['instructions'],
-                'subject': subject,
-                'school': school,
-                'teacher': user,
-                'total_marks': serializer.validated_data.get('total_marks', 50),
-                'num_mcq': serializer.validated_data.get('num_mcq', 20),
-                'num_short': serializer.validated_data.get('num_short', 5),
-                'num_long': serializer.validated_data.get('num_long', 4),
-            },
+        result = generate_paper_from_multiple(
+            paper_ids=serializer.validated_data['paper_ids'],
+            instructions=serializer.validated_data['instructions'],
+            subject=subject,
+            school=school,
+            teacher=user,
+            total_marks=serializer.validated_data.get('total_marks', 50),
+            num_mcq=serializer.validated_data.get('num_mcq', 20),
+            num_short=serializer.validated_data.get('num_short', 5),
+            num_long=serializer.validated_data.get('num_long', 4),
         )
-        thread.daemon = True
-        thread.start()
+
+        if not result.get('success'):
+            return Response({'error': result.get('error')}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
-            'message': 'Question generation from papers started',
+            'message': 'Question generation from papers completed',
+            'questions_count': result.get('questions_count'),
             'subject': subject.name,
-        }, status=status.HTTP_202_ACCEPTED)
+        }, status=status.HTTP_201_CREATED)
 
 
 # ============================================================
@@ -601,23 +603,20 @@ class GenerateFromInstructionsView(APIView):
             'num_long': num_long,
         }
 
-        # Run generation in background thread
+        # Run generation (waiting for result to ensure completion on Free Tier)
         from .paper_processor import generate_questions_from_instructions
-        thread = threading.Thread(
-            target=generate_questions_from_instructions,
-            args=(subject, chapters, topics, marks_distribution, total_marks, school, user),
+        result = generate_questions_from_instructions(
+            subject, chapters, topics, marks_distribution, total_marks, school, user
         )
-        thread.daemon = True
-        thread.start()
+
+        if not result.get('success'):
+            return Response({'error': result.get('error')}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({
-            'message': 'Question generation from instructions started',
+            'message': 'Question generation from instructions completed',
+            'questions_count': result.get('questions_count'),
             'subject': subject.name,
-            'total_marks': total_marks,
-            'num_mcq': num_mcq,
-            'num_short': num_short,
-            'num_long': num_long,
-        }, status=status.HTTP_202_ACCEPTED)
+        }, status=status.HTTP_201_CREATED)
 
 
 # ============================================================

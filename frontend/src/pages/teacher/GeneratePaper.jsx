@@ -222,7 +222,7 @@ export default function GeneratePaper() {
         num_long: parseInt(paperForm.num_long),
       });
 
-      setSuccess('Question generation started! The AI is creating questions in the background. This usually takes 1-2 minutes. Check the question bank shortly.');
+      setSuccess('Question generation successful! The AI has created the questions. You can now use them to create an exam.');
       setPaperFiles([]);
       setSelectedExistingPaperIds([]);
       setPaperForm({ subject: '', instructions: '', total_marks: 50, num_mcq: 20, num_short: 5, num_long: 4 });
@@ -263,7 +263,7 @@ export default function GeneratePaper() {
         num_long: parseInt(instructionForm.num_long),
       });
 
-      setSuccess('Question generation started! The AI is creating questions in the background. This usually takes 1-2 minutes. Check the question bank shortly.');
+      setSuccess('Question generation successful! The AI has created the questions. You can now use them to create an exam.');
       setInstructionForm({ subject: '', chapter_ids: [], topics: '', total_marks: 50, num_mcq: 20, num_short: 5, num_long: 4 });
       setChapters([]);
     } catch (err) {
@@ -313,21 +313,15 @@ export default function GeneratePaper() {
               </svg>
             </div>
             <div>
-              <h3 className="text-lg font-bold text-green-800">Generation in Progress</h3>
+              <h3 className="text-lg font-bold text-green-800">Generation Successful!</h3>
               <p className="text-green-700 mt-1">{success}</p>
               <div className="flex flex-wrap gap-3 mt-4">
                 <Link to="/teacher/create-exam" className="text-sm bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 transition shadow-sm font-medium">
                   Create Exam Now
                 </Link>
                 <Link to="/teacher/papers" className="text-sm bg-white text-green-700 border border-green-200 px-5 py-2 rounded-lg hover:bg-green-100 transition font-medium">
-                  View Papers List
+                  View Questions Bank
                 </Link>
-                <button 
-                  onClick={() => setSuccess('')}
-                  className="text-sm bg-gray-100 text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-200 transition font-medium"
-                >
-                  Dismiss
-                </button>
               </div>
             </div>
           </div>

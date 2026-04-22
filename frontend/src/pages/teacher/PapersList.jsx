@@ -39,30 +39,13 @@ export default function PapersList() {
     setGenerating((prev) => ({ ...prev, [paperId]: true }));
     try {
       await api.post(`/api/exams/papers/${paperId}/generate/`);
-      // Poll every 5 seconds until generation completes
-      const poll = setInterval(async () => {
-        try {
-          const res = await api.get('/api/exams/papers/', { params: { page } });
-          const data = res.data.results || res.data;
-          const paper = data.find((p) => p.id === paperId);
-          if (paper && (paper.questions_generated || paper.generation_error)) {
-            clearInterval(poll);
-            setPapers(data);
-            setHasMore(!!res.data.next);
-            setGenerating((prev) => ({ ...prev, [paperId]: false }));
-          }
-        } catch { /* ignore poll errors */ }
-      }, 5000);
-      // Stop polling after 3 minutes max
-      setTimeout(() => {
-        clearInterval(poll);
-        setGenerating((prev) => ({ ...prev, [paperId]: false }));
-        fetchPapers(page);
-      }, 180000);
+      await fetchPapers(page);
+      setGenerating((prev) => ({ ...prev, [paperId]: false }));
     } catch (err) {
       const msg = err.response?.data?.detail || err.response?.data?.error || 'Failed to generate questions';
       alert(msg);
       setGenerating((prev) => ({ ...prev, [paperId]: false }));
+      await fetchPapers(page);
     }
   };
 
