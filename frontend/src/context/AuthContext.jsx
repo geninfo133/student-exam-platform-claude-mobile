@@ -10,7 +10,15 @@ export function AuthProvider({ children }) {
   const fetchProfile = async () => {
     try {
       const res = await api.get('/api/auth/profile/');
-      setUser(res.data);
+      const userData = res.data;
+      // If photo is a relative path, prefix with API base
+      if (userData.profile_photo && !userData.profile_photo.startsWith('http')) {
+        const baseUrl = import.meta.env.VITE_API_URL || '';
+        userData.profile_photo = baseUrl.endsWith('/') 
+          ? `${baseUrl}${userData.profile_photo.startsWith('/') ? userData.profile_photo.slice(1) : userData.profile_photo}`
+          : `${baseUrl}${userData.profile_photo.startsWith('/') ? userData.profile_photo : '/' + userData.profile_photo}`;
+      }
+      setUser(userData);
     } catch {
       setUser(null);
     } finally {
@@ -31,10 +39,17 @@ export function AuthProvider({ children }) {
     const res = await api.post('/api/auth/login/', { username, password });
     localStorage.setItem('access_token', res.data.access);
     localStorage.setItem('refresh_token', res.data.refresh);
-    // Fetch profile and return user data so callers can navigate immediately
+    // Fetch profile and return user data
     const profileRes = await api.get('/api/auth/profile/');
-    setUser(profileRes.data);
-    return profileRes.data;
+    const userData = profileRes.data;
+    if (userData.profile_photo && !userData.profile_photo.startsWith('http')) {
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      userData.profile_photo = baseUrl.endsWith('/') 
+        ? `${baseUrl}${userData.profile_photo.startsWith('/') ? userData.profile_photo.slice(1) : userData.profile_photo}`
+        : `${baseUrl}${userData.profile_photo.startsWith('/') ? userData.profile_photo : '/' + userData.profile_photo}`;
+    }
+    setUser(userData);
+    return userData;
   };
 
   const register = async (data) => {
