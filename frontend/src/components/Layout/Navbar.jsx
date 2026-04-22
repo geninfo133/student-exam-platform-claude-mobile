@@ -187,8 +187,7 @@ export default function Navbar() {
       <NavLink to="/teacher/dashboard" label="Dashboard" icon="dashboard" />
       <Dropdown label="Papers" icon="papers" items={[
         { to: '/teacher/generate-paper', label: 'Generate Questions', icon: 'generate' },
-        { to: '/teacher/papers', label: 'Uploaded Papers', icon: 'papers' },
-        { to: '/teacher/papers/view', label: 'View Papers', icon: 'exams' },
+        { to: '/teacher/papers', label: 'Manage Papers', icon: 'papers' },
       ]} />
       <Dropdown label="Exams" icon="exams" items={[
         { to: '/teacher/create-exam', label: 'Create Exam', icon: 'exams' },
@@ -214,7 +213,7 @@ export default function Navbar() {
         { to: '/teacher/created-exams', label: 'Created Exams', icon: 'papers' },
         { to: '/teacher/grading', label: 'Grading Queue', icon: 'history' },
         { to: '/teacher/generate-paper', label: 'Generate Questions', icon: 'generate' },
-        { to: '/teacher/papers/view', label: 'View Papers', icon: 'papers' },
+        { to: '/teacher/papers', label: 'Manage Papers', icon: 'papers' },
       ]} />
       <NavLink to="/school/progress-card" label="Progress Card" icon="progress" />
     </>
@@ -234,7 +233,7 @@ export default function Navbar() {
         { to: '/teacher/created-exams', label: 'Created Exams', icon: 'papers' },
         { to: '/teacher/grading', label: 'Grading Queue', icon: 'history' },
         { to: '/teacher/generate-paper', label: 'Generate Questions', icon: 'generate' },
-        { to: '/teacher/papers/view', label: 'View Papers', icon: 'papers' },
+        { to: '/teacher/papers', label: 'Manage Papers', icon: 'papers' },
       ]} />
       <NavLink to="/coaching/progress-card" label="Progress Card" icon="progress" />
     </>
