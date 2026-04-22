@@ -295,15 +295,41 @@ export default function GeneratePaper() {
 
       {/* Success Message */}
       {success && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
-          <p className="text-green-700 font-medium">{success}</p>
-          <div className="flex gap-3 mt-3">
-            <Link to="/teacher/create-exam" className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition">
-              Create Exam Now
-            </Link>
-            <Link to="/teacher/papers" className="text-sm bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition">
-              View Papers
-            </Link>
+        <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-6 relative">
+          <button 
+            onClick={() => setSuccess('')}
+            className="absolute top-4 right-4 text-green-500 hover:text-green-700 transition"
+            title="Dismiss"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-green-800">Generation in Progress</h3>
+              <p className="text-green-700 mt-1">{success}</p>
+              <div className="flex flex-wrap gap-3 mt-4">
+                <Link to="/teacher/create-exam" className="text-sm bg-indigo-600 text-white px-5 py-2 rounded-lg hover:bg-indigo-700 transition shadow-sm font-medium">
+                  Create Exam Now
+                </Link>
+                <Link to="/teacher/papers" className="text-sm bg-white text-green-700 border border-green-200 px-5 py-2 rounded-lg hover:bg-green-100 transition font-medium">
+                  View Papers List
+                </Link>
+                <button 
+                  onClick={() => setSuccess('')}
+                  className="text-sm bg-gray-100 text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-200 transition font-medium"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
