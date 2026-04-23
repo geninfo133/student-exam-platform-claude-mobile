@@ -33,10 +33,12 @@ def generate_questions_from_paper(exam_paper_id):
         content = [prompt]
         if exam_paper.extracted_text:
             content.append(f"Context: {exam_paper.extracted_text[:10000]}")
-        else:
-            with open(exam_paper.file.path, 'rb') as f:
-                pdf_data = f.read()
+        elif exam_paper.file:
+            # Use file object directly to support Cloudinary/Remote storage
+            pdf_data = exam_paper.file.read()
             content.append({'mime_type': 'application/pdf', 'data': pdf_data})
+        else:
+            raise ValueError("No text or file available for processing")
 
         response = model.generate_content(content)
         text = response.text.strip()
