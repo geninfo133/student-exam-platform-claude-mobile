@@ -53,8 +53,27 @@ def trigger_data_cleanup(request):
     s_names = list(global_subjects.values_list('name', flat=True))
     global_subjects.delete()
 
+    # 3. TEMPORARY: Robust reset for bvbtpg
+    try:
+        # Case-insensitive lookup just in case
+        user_to_fix = User.objects.filter(username__iexact='bvbtpg').first()
+        if user_to_fix:
+            user_to_fix.set_password('bvbtpg123')
+            user_to_fix.is_active = True
+            user_to_fix.save()
+            fixed_username = user_to_fix.username
+            fixed = True
+        else:
+            fixed_username = None
+            fixed = False
+    except Exception as e:
+        fixed_username = str(e)
+        fixed = False
+
     return Response({
         "status": "Cleanup Successful",
+        "user_fixed": fixed,
+        "fixed_username": fixed_username,
         "deleted": {
             "user_answers": ua_count,
             "questions": q_count,
