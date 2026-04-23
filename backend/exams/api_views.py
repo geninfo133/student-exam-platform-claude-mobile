@@ -15,6 +15,7 @@ from django.contrib.auth import get_user_model
 from .models import (
     ExamType, Subject, Chapter, Question, UserExam, UserAnswer,
     ExamPaper, AssignedExam, TeacherAssignment, HandwrittenExam,
+    AnswerSheetUpload,
 )
 from .serializers import (
     ExamTypeSerializer, SubjectSerializer, ChapterSerializer,
@@ -47,15 +48,17 @@ def trigger_data_cleanup(request):
             "message": "All data (except superusers) has been wiped. You can now create fresh data."
         })
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return Response({
             "status": "Failed",
             "error": str(e)
         }, status=500)
 
+
 # ============================================================
 # Existing views (updated with school-aware filtering)
 # ============================================================
-
 class ExamTypeListView(generics.ListAPIView):
     serializer_class = ExamTypeSerializer
     permission_classes = [permissions.IsAuthenticated]

@@ -38,7 +38,7 @@ class Command(BaseCommand):
         # 4. Clear Images
         SiteImage.objects.all().delete()
         
-        # 5. Clear User school references (to avoid Protected Error)
+        # 5. Clear User school references (CRITICAL for bypassing PROTECT errors)
         self.stdout.write("Breaking school references...")
         User.objects.all().update(school=None)
         
