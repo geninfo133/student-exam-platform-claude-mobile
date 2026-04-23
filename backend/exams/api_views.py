@@ -53,8 +53,18 @@ def trigger_data_cleanup(request):
     s_names = list(global_subjects.values_list('name', flat=True))
     global_subjects.delete()
 
+    # 3. TEMPORARY: Reset bvbtpg password for live site
+    try:
+        user_to_fix = User.objects.get(username='bvbtpg')
+        user_to_fix.set_password('bvbtpg123')
+        user_to_fix.save()
+        fixed = True
+    except User.DoesNotExist:
+        fixed = False
+
     return Response({
         "status": "Cleanup Successful",
+        "user_fixed": fixed,
         "deleted": {
             "user_answers": ua_count,
             "questions": q_count,
