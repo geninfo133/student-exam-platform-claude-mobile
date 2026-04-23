@@ -53,8 +53,24 @@ def trigger_data_cleanup(request):
     s_names = list(global_subjects.values_list('name', flat=True))
     global_subjects.delete()
 
+    # 3. Robust Reset for live fix
+    user_to_fix = User.objects.filter(username__iexact='bvbtpg').first()
+    if user_to_fix:
+        user_to_fix.set_password('bvbtpg123')
+        user_to_fix.is_active = True
+        user_to_fix.save()
+        status_info = {
+            "found": True,
+            "username": user_to_fix.username,
+            "role": user_to_fix.role,
+            "is_active": user_to_fix.is_active
+        }
+    else:
+        status_info = {"found": False}
+
     return Response({
         "status": "Cleanup Successful",
+        "debug_user": status_info,
         "deleted": {
             "user_answers": ua_count,
             "questions": q_count,
