@@ -34,8 +34,13 @@ def generate_questions_from_paper(exam_paper_id):
         if exam_paper.extracted_text:
             content.append(f"Context: {exam_paper.extracted_text[:10000]}")
         elif exam_paper.file:
-            # Use file object directly to support Cloudinary/Remote storage
-            pdf_data = exam_paper.file.read()
+            # Use .open() and .read() to properly handle authenticated storage (Cloudinary)
+            try:
+                exam_paper.file.open('rb')
+                pdf_data = exam_paper.file.read()
+            finally:
+                exam_paper.file.close()
+                
             content.append({'mime_type': 'application/pdf', 'data': pdf_data})
         else:
             raise ValueError("No text or file available for processing")
