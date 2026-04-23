@@ -38,47 +38,19 @@ User = get_user_model()
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def trigger_data_cleanup(request):
-    """Trigger the removal of global sample data via URL."""
-    from .models import Question, Chapter, Subject, UserAnswer
-    
-    global_subjects = Subject.objects.filter(school__isnull=True)
-    global_sub_ids = list(global_subjects.values_list('id', flat=True))
-    
-    # 1. Delete dependent data
-    ua_count = UserAnswer.objects.filter(question__subject_id__in=global_sub_ids).delete()[0]
-    q_count = Question.objects.filter(subject_id__in=global_sub_ids).delete()[0]
-    c_count = Chapter.objects.filter(subject_id__in=global_sub_ids).delete()[0]
-    
-    # 2. Delete Subjects
-    s_names = list(global_subjects.values_list('name', flat=True))
-    global_subjects.delete()
-
-    # 3. Robust Reset for live fix
-    user_to_fix = User.objects.filter(username__iexact='bvbtpg').first()
-    if user_to_fix:
-        user_to_fix.set_password('bvbtpg123')
-        user_to_fix.is_active = True
-        user_to_fix.save()
-        status_info = {
-            "found": True,
-            "username": user_to_fix.username,
-            "role": user_to_fix.role,
-            "is_active": user_to_fix.is_active
-        }
-    else:
-        status_info = {"found": False}
-
-    return Response({
-        "status": "Cleanup Successful",
-        "debug_user": status_info,
-        "deleted": {
-            "user_answers": ua_count,
-            "questions": q_count,
-            "chapters": c_count,
-            "subjects": s_names
-        }
-    })
-
+    """Full database wipe via URL (Nuke Everything)."""
+    from django.core.management import call_command
+    try:
+        call_command('nuke_data')
+        return Response({
+            "status": "Nuclear Reset Successful",
+            "message": "All data (except superusers) has been wiped. You can now create fresh data."
+        })
+    except Exception as e:
+        return Response({
+            "status": "Failed",
+            "error": str(e)
+        }, status=500)
 
 # ============================================================
 # Existing views (updated with school-aware filtering)
