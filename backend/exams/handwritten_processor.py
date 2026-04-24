@@ -25,16 +25,21 @@ def _encode_file(file_field):
     if url.startswith('http'):
         import requests
         from requests.auth import HTTPBasicAuth
-        
-        # Get credentials from settings
-        cloudinary_config = settings.CLOUDINARY_STORAGE
-        auth = HTTPBasicAuth(cloudinary_config['API_KEY'], cloudinary_config['API_SECRET'])
-        
-        response = requests.get(url, auth=auth)
-        if response.status_code == 200:
-            data = response.content
-        else:
-            # Fallback to standard open
+        try:
+            # Use credentials from settings
+            cloudinary_config = settings.CLOUDINARY_STORAGE
+            auth = HTTPBasicAuth(cloudinary_config['API_KEY'], cloudinary_config['API_SECRET'])
+            
+            response = requests.get(url, auth=auth)
+            if response.status_code == 200:
+                data = response.content
+            else:
+                # Fallback to standard open
+                file_field.open('rb')
+                data = file_field.read()
+                file_field.close()
+        except Exception as e:
+            logger.error(f"Error fetching remote file {url}: {e}")
             file_field.open('rb')
             data = file_field.read()
             file_field.close()
