@@ -328,7 +328,7 @@ export default function Navbar() {
             </div>
             <div className="hidden sm:block">
               <p className="text-white font-bold text-sm leading-tight truncate max-w-[180px] lg:max-w-xs">
-                {user?.school_name || user?.school_account_name || 'ExamPrep'}
+                {user?.school_name || user?.school_account_name || 'AI based Exam Management System'}
               </p>
               {getOrgLabel() && (
                 <p className="text-indigo-400 text-xs leading-tight">{getOrgLabel()}</p>
