@@ -85,9 +85,16 @@ class SubjectListView(generics.ListAPIView):
             chapter_count=Count('chapters'),
             question_count=Count('questions'),
         )
-        # Show school's own subjects AND global ones (to allow matching)
+        
         if school:
-            qs = qs.filter(Q(school=school) | Q(school__isnull=True))
+            # Get names of subjects already defined for this school
+            school_subject_names = Subject.objects.filter(school=school).values_list('name', flat=True)
+            # Return school's own subjects OR global subjects that don't share a name with a school subject
+            qs = qs.filter(
+                Q(school=school) | 
+                (Q(school__isnull=True) & ~Q(name__in=school_subject_names))
+            )
+            
         exam_type = self.request.query_params.get('exam_type')
         if exam_type:
             qs = qs.filter(exam_type_id=exam_type)
