@@ -24,13 +24,10 @@ def _retrieve_file_data(file_field):
     """Safely retrieve file content from local storage or Cloudinary. Returns (data, mime_type)."""
     url = file_field.url
     
-    # 1. Better MIME type detection
+    # 1. MIME type detection
     mime, _ = mimetypes.guess_type(url)
     if not mime:
-        if 'image' in url.lower():
-            mime = 'image/png'  # Default for images without extension
-        else:
-            mime = 'application/pdf'  # Fallback for documents
+        mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
         
     # TRY 1: Native Django file open
     try:
@@ -40,63 +37,72 @@ def _retrieve_file_data(file_field):
         if pdf_data:
             return pdf_data, mime
     except Exception as e:
-        logger.warning(f"Native open failed for {url}: {e}")
+        logger.warning(f"Native open failed: {e}")
 
-    # TRY 2: Authenticated Cloudinary Fetch
+    # TRY 2: Authenticated Cloudinary API Fetch
     if 'cloudinary' in url.lower():
         try:
             import cloudinary
             import cloudinary.utils
+            import cloudinary.api
             import re
             
-            # Configure
             cloudinary.config(
                 cloud_name=settings.CLOUDINARY_STORAGE['CLOUD_NAME'],
                 api_key=settings.CLOUDINARY_STORAGE['API_KEY'],
                 api_secret=settings.CLOUDINARY_STORAGE['API_SECRET']
             )
             
-            # Extract Public ID correctly
-            # Format: .../upload/v1234567/folder/public_id.ext
+            # Extract Public ID from URL
             public_id = url
             if '/upload/' in url:
                 path_after_upload = url.split('/upload/')[-1]
-                # Remove version (v1234567/)
                 path_no_version = re.sub(r'^v\d+/', '', path_after_upload)
-                # Remove extension
                 public_id = path_no_version.rsplit('.', 1)[0]
             
-            # Generate a signed URL that bypasses all access restrictions
-            signed_url = cloudinary.utils.cloudinary_url(
-                public_id, 
-                sign_url=True, 
-                secure=True,
-                resource_type='image' if 'image' in url else 'raw'
-            )[0]
-            
-            response = requests.get(signed_url, timeout=30)
-            if response.status_code == 200:
-                logger.info(f"Successfully fetched signed Cloudinary resource: {public_id}")
-                return response.content, mime
+            # Use the Admin API to get the correct resource type and secure URL
+            try:
+                # We try 'image' then 'raw' as Cloudinary treats them differently
+                resource = None
+                for r_type in ['image', 'raw']:
+                    try:
+                        resource = cloudinary.api.resource(public_id, resource_type=r_type)
+                        break
+                    except: continue
+                
+                if resource:
+                    # Generate a signed URL using the verified public_id and resource_type
+                    signed_url = cloudinary.utils.cloudinary_url(
+                        resource['public_id'], 
+                        sign_url=True, 
+                        secure=True,
+                        version=resource.get('version'),
+                        resource_type=resource.get('resource_type', 'image')
+                    )[0]
+                    
+                    response = requests.get(signed_url, timeout=30)
+                    if response.status_code == 200:
+                        logger.info(f"Fetched signed resource: {public_id}")
+                        return response.content, mime
+            except Exception as api_err:
+                logger.warning(f"Cloudinary Admin API check failed: {api_err}")
+                
         except Exception as e:
-            logger.warning(f"Cloudinary Signed Fetch failed: {e}")
+            logger.warning(f"Cloudinary Logic failed: {e}")
 
-    # TRY 3: Standard HTTP with Browser Headers
+    # TRY 3: Fallback HTTP
     if url.startswith('http'):
         try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
+            headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.get(url, timeout=30, allow_redirects=True, headers=headers)
             if response.status_code == 200:
                 return response.content, mime
             elif response.status_code == 401:
-                logger.error(f"HTTP 401 at {url}")
-                raise ValueError(f"Access Denied (401). Cloudinary rejected the request. URL: {url}")
+                raise ValueError(f"Cloudinary Access Denied (401). Please ensure your Cloudinary API Secret is correct in the environment variables.")
             else:
-                raise ValueError(f"HTTP {response.status_code}: Unable to access document")
+                raise ValueError(f"Storage Error ({response.status_code})")
         except requests.exceptions.RequestException as req_err:
-            raise ValueError(f"Network error: {str(req_err)}")
+            raise ValueError(f"Connection failed: {str(req_err)}")
 
     return None, None
 
