@@ -38,7 +38,12 @@ def _encode_file(file_field):
             logger.error(f"Cannot retrieve local file via HTTP: {url}")
         else:
             try:
-                response = requests.get(url, timeout=30, allow_redirects=True)
+                from requests.auth import HTTPBasicAuth
+                auth = HTTPBasicAuth(
+                    settings.CLOUDINARY_STORAGE['API_KEY'], 
+                    settings.CLOUDINARY_STORAGE['API_SECRET']
+                )
+                response = requests.get(url, auth=auth, timeout=30, allow_redirects=True)
                 if response.status_code == 200:
                     data = response.content
                     logger.info(f"Successfully downloaded file from {url}")
