@@ -26,53 +26,56 @@ def get_gemini_model(api_key):
         except: continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
-def _retrieve_file_data(file_field):
-    """Safely and FASTly retrieve file content."""
+def _retrieve_file_data(file_field, paper_obj=None):
+    """Safely and FASTly retrieve file content with live progress updates."""
     url = file_field.url
     mime, _ = mimetypes.guess_type(url)
     if not mime:
         mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
     
-    debug_log = []
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-    }
+    keys = settings.CLOUDINARY_STORAGE
+    if keys.get('API_SECRET'):
+        cloudinary.config(cloud_name=keys['CLOUD_NAME'], api_key=keys['API_KEY'], api_secret=keys['API_SECRET'], secure=True)
+    
+    exts_to_try = ["", ".png", ".pdf", ".jpg"]
+    headers = {'User-Agent': 'Mozilla/5.0'}
 
-    # 1. Try Direct HTTP with Browser Headers (Fastest)
+    # Extract Public ID
     try:
-        resp = requests.get(url, headers=headers, timeout=10, allow_redirects=True)
-        if resp.status_code == 200:
-            return resp.content, mime, "HTTP-Public"
-        debug_log.append(f"Public-HTTP: {resp.status_code}")
-    except Exception as e:
-        debug_log.append(f"Public-HTTP-Err: {str(e)[:30]}")
+        public_id = url.split('/upload/')[-1]
+        if '/private/' in url: public_id = url.split('/private/')[-1]
+        if '/authenticated/' in url: public_id = url.split('/authenticated/')[-1]
+        public_id = re.sub(r'^v\d+/', '', public_id).rsplit('.', 1)[0]
+    except:
+        public_id = url.split('/')[-1].rsplit('.', 1)[0]
 
-    # 2. Try Authenticated HTTP (Basic Auth) - Most Robust for Cloudinary
-    if 'cloudinary' in url.lower():
+    for ext in exts_to_try:
+        if paper_obj:
+            paper_obj.generation_error = f'[PROGRESS] Checking {ext if ext else "direct"} extension...'
+            paper_obj.save()
+
+        current_url = f"{url}{ext}"
+        
+        # 1. Try Signed SDK (Most likely to work for Private/Root files)
+        if keys.get('API_SECRET') and 'cloudinary' in url.lower():
+            for r_type in ['image', 'raw']:
+                try:
+                    signed_url, _ = cloudinary.utils.cloudinary_url(
+                        f"{public_id}{ext}", sign_url=True, secure=True, resource_type=r_type
+                    )
+                    resp = requests.get(signed_url, timeout=4)
+                    if resp.status_code == 200:
+                        return resp.content, mime, f"Signed-{r_type}{ext}"
+                except: continue
+
+        # 2. Try Public HTTP
         try:
-            from requests.auth import HTTPBasicAuth
-            auth = HTTPBasicAuth(
-                settings.CLOUDINARY_STORAGE['API_KEY'], 
-                settings.CLOUDINARY_STORAGE['API_SECRET']
-            )
-            resp = requests.get(url, auth=auth, headers=headers, timeout=10)
+            resp = requests.get(current_url, headers=headers, timeout=3)
             if resp.status_code == 200:
-                return resp.content, mime, "HTTP-Auth"
-            debug_log.append(f"Auth-HTTP: {resp.status_code}")
-        except Exception as e:
-            debug_log.append(f"Auth-HTTP-Err: {str(e)[:30]}")
+                return resp.content, mime, f"Public-{ext}"
+        except: pass
 
-    # 3. Try Native Open (Django Storage fallback)
-    try:
-        file_field.open('rb')
-        data = file_field.read()
-        file_field.close()
-        if data: return data, mime, "Native"
-    except Exception as e:
-        debug_log.append(f"Native-Err: {str(e)[:30]}")
-
-    return None, None, " | ".join(debug_log)
+    return None, None, "All extensions failed"
 
 def _extract_json(text):
     text = text.strip()
@@ -92,12 +95,15 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         
-        exam_paper.generation_error = '[PROGRESS] Reading your paper...'
+        exam_paper.generation_error = '[PROGRESS] Initializing retrieval...'
         exam_paper.save()
 
         api_key = settings.GEMINI_API_KEY
-        data, mime, debug_info = _retrieve_file_data(exam_paper.file)
-        if not data: raise ValueError(f"File access failed. Details: {debug_info}")
+        # Pass the paper object to _retrieve_file_data for live updates
+        data, mime, debug_info = _retrieve_file_data(exam_paper.file, exam_paper)
+        
+        if not data: 
+            raise ValueError(f"Could not find file on Cloudinary. Tried 4 extensions. Error: {debug_info}")
 
         exam_paper.generation_error = '[PROGRESS] AI is thinking (30s)...'
         exam_paper.save()
