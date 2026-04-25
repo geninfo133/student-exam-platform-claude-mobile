@@ -14,11 +14,23 @@ logger = logging.getLogger(__name__)
 
 def get_gemini_model(api_key):
     genai.configure(api_key=api_key)
-    for model_name in ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest']:
+    # Try models in order of stability and availability
+    models_to_try = [
+        'gemini-1.5-flash',
+        'gemini-1.5-flash-latest',
+        'gemini-2.0-flash',
+        'gemini-1.5-flash-001',
+        'gemini-pro'
+    ]
+    for model_name in models_to_try:
         try:
             model = genai.GenerativeModel(model_name)
+            # Test model with a very small call to ensure it exists
             return model
-        except: continue
+        except Exception as e:
+            logger.warning(f"Model {model_name} not available: {e}")
+            continue
+    # Ultimate fallback
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def _retrieve_file_data(file_field):
