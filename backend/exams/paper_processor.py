@@ -27,55 +27,58 @@ def get_gemini_model(api_key):
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def _retrieve_file_data(file_field, paper_obj=None):
-    """Safely and FASTly retrieve file content with live progress updates."""
+    """Ultra-fast file retrieval using session pooling and prioritized public access."""
     url = file_field.url
     mime, _ = mimetypes.guess_type(url)
     if not mime:
         mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
     
-    keys = settings.CLOUDINARY_STORAGE
-    if keys.get('API_SECRET'):
-        cloudinary.config(cloud_name=keys['CLOUD_NAME'], api_key=keys['API_KEY'], api_secret=keys['API_SECRET'], secure=True)
+    session = requests.Session()
+    session.headers.update({'User-Agent': 'Mozilla/5.0'})
     
-    exts_to_try = ["", ".png", ".pdf", ".jpg"]
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    keys = settings.CLOUDINARY_STORAGE
+    exts = ["", ".png", ".pdf", ".jpg"]
 
-    # Extract Public ID
-    try:
-        public_id = url.split('/upload/')[-1]
-        if '/private/' in url: public_id = url.split('/private/')[-1]
-        if '/authenticated/' in url: public_id = url.split('/authenticated/')[-1]
-        public_id = re.sub(r'^v\d+/', '', public_id).rsplit('.', 1)[0]
-    except:
-        public_id = url.split('/')[-1].rsplit('.', 1)[0]
-
-    for ext in exts_to_try:
+    # --- PHASE 1: TRY ALL PUBLIC LINKS FIRST (FASTEST) ---
+    for ext in exts:
         if paper_obj:
-            paper_obj.generation_error = f'[PROGRESS] Checking {ext if ext else "direct"} extension...'
+            paper_obj.generation_error = f'[PROGRESS] Checking public {ext if ext else "link"}...'
             paper_obj.save()
+        try:
+            resp = session.get(f"{url}{ext}", timeout=2)
+            if resp.status_code == 200:
+                return resp.content, mime, f"Public-{ext}"
+        except: continue
 
-        current_url = f"{url}{ext}"
+    # --- PHASE 2: TRY SECURE SDK ACCESS (ONLY IF PUBLIC FAILED) ---
+    if 'cloudinary' in url.lower() and keys.get('API_SECRET'):
+        cloudinary.config(cloud_name=keys['CLOUD_NAME'], api_key=keys['API_KEY'], api_secret=keys['API_SECRET'], secure=True)
         
-        # 1. Try Signed SDK (Most likely to work for Private/Root files)
-        if keys.get('API_SECRET') and 'cloudinary' in url.lower():
+        # Extract Public ID
+        try:
+            public_id = url.split('/upload/')[-1]
+            if '/private/' in url: public_id = url.split('/private/')[-1]
+            if '/authenticated/' in url: public_id = url.split('/authenticated/')[-1]
+            public_id = re.sub(r'^v\d+/', '', public_id).rsplit('.', 1)[0]
+        except:
+            public_id = url.split('/')[-1].rsplit('.', 1)[0]
+
+        for ext in exts:
+            if paper_obj:
+                paper_obj.generation_error = f'[PROGRESS] Verifying secure access ({ext if ext else "direct"})...'
+                paper_obj.save()
+            
             for r_type in ['image', 'raw']:
                 try:
                     signed_url, _ = cloudinary.utils.cloudinary_url(
                         f"{public_id}{ext}", sign_url=True, secure=True, resource_type=r_type
                     )
-                    resp = requests.get(signed_url, timeout=4)
+                    resp = session.get(signed_url, timeout=3)
                     if resp.status_code == 200:
                         return resp.content, mime, f"Signed-{r_type}{ext}"
                 except: continue
 
-        # 2. Try Public HTTP
-        try:
-            resp = requests.get(current_url, headers=headers, timeout=3)
-            if resp.status_code == 200:
-                return resp.content, mime, f"Public-{ext}"
-        except: pass
-
-    return None, None, "All extensions failed"
+    return None, None, "File not found or access denied by Cloudinary"
 
 def _extract_json(text):
     text = text.strip()
@@ -95,15 +98,11 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         
-        exam_paper.generation_error = '[PROGRESS] Initializing retrieval...'
-        exam_paper.save()
-
         api_key = settings.GEMINI_API_KEY
-        # Pass the paper object to _retrieve_file_data for live updates
         data, mime, debug_info = _retrieve_file_data(exam_paper.file, exam_paper)
         
         if not data: 
-            raise ValueError(f"Could not find file on Cloudinary. Tried 4 extensions. Error: {debug_info}")
+            raise ValueError(f"Cloudinary Error: {debug_info}")
 
         exam_paper.generation_error = '[PROGRESS] AI is thinking (30s)...'
         exam_paper.save()
