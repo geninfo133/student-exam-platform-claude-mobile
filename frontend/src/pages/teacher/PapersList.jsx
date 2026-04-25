@@ -166,10 +166,12 @@ export default function PapersList() {
                       </p>
                       {paper.generation_error && (
                         <p className={`text-sm mt-1 font-medium ${
-                          paper.generation_error.includes('[PROGRESS]') ? 'text-indigo-600' : 'text-red-500'
+                          paper.generation_error.includes('[PROGRESS]') ? 'text-indigo-600' : 
+                          paper.generation_error.includes('[SUCCESS]') ? 'text-green-600' : 'text-red-500'
                         }`}>
-                          {paper.generation_error.includes('[PROGRESS]') ? '⚡ Status: ' : '❌ Error: '}
-                          {paper.generation_error.replace('[PROGRESS] ', '')}
+                          {paper.generation_error.includes('[PROGRESS]') ? '⚡ Status: ' : 
+                           paper.generation_error.includes('[SUCCESS]') ? '✅ Success: ' : '❌ Error: '}
+                          {paper.generation_error.replace('[PROGRESS] ', '').replace('[SUCCESS] ', '')}
                         </p>
                       )}
                     </div>

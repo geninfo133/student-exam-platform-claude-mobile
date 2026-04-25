@@ -149,7 +149,10 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
                 except: continue
         
         exam_paper.questions_generated = (created_count > 0)
-        exam_paper.generation_error = '' if created_count > 0 else 'Failed to save questions.'
+        if created_count > 0:
+            exam_paper.generation_error = '[SUCCESS] Done! Questions are saved to your Question Bank.'
+        else:
+            exam_paper.generation_error = 'Failed to save questions.'
         exam_paper.save()
         
     except Exception as e:
