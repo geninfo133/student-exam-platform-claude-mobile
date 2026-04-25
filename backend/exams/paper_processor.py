@@ -100,7 +100,7 @@ def _extract_json(text):
 
 def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
     try:
-        # Force a fresh DB connection for the thread
+        import time
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         
@@ -115,21 +115,43 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         if not data:
             raise ValueError(f"File Retrieval Failed: {debug_info}")
 
-        exam_paper.generation_error = 'Step 2/3: AI is processing...'
-        exam_paper.save()
+        models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']
+        response_text = None
+        
+        for model_name in models_to_try:
+            try:
+                exam_paper.generation_error = f'Step 2/3: AI is processing ({model_name})...'
+                exam_paper.save()
+                
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel(model_name)
+                
+                prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
+                if instructions: prompt += f"\nSpecific Instructions: {instructions}"
+                prompt += '\nReturn ONLY a JSON object with a "questions" key.'
+                
+                response = model.generate_content([prompt, {'mime_type': mime, 'data': data}])
+                response_text = response.text.strip()
+                if response_text: break # Success
+                
+            except Exception as e:
+                err_msg = str(e)
+                if "429" in err_msg:
+                    exam_paper.generation_error = f'AI Busy (Rate Limit)... Waiting 10s to retry...'
+                    exam_paper.save()
+                    time.sleep(10)
+                    # Continue to next model or retry current
+                    continue
+                logger.warning(f"Model {model_name} failed: {err_msg}")
+                continue
 
-        model = get_gemini_model(api_key)
-        prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
-        if instructions: prompt += f"\nSpecific Instructions: {instructions}"
-        prompt += '\nReturn ONLY a JSON object with a "questions" key containing question_type, question_text, marks, difficulty, option_a, option_b, option_c, option_d, correct_answer (A/B/C/D), model_answer.'
-        
-        response = model.generate_content([prompt, {'mime_type': mime, 'data': data}])
-        text = response.text.strip()
-        
+        if not response_text:
+            raise ValueError("All AI models are currently busy or unavailable. Please try again in 1 minute.")
+
         exam_paper.generation_error = 'Step 3/3: Saving to database...'
         exam_paper.save()
 
-        data = _extract_json(text)
+        data = _extract_json(response_text)
         if not data or not data.get('questions'):
             raise ValueError("AI returned no questions.")
 
