@@ -3,6 +3,7 @@ Extract text from uploaded exam papers (PDF) and generate questions using Gemini
 """
 import json
 import logging
+from django.utils import timezone
 import google.generativeai as genai
 from django.conf import settings
 from .models import ExamPaper, Question
@@ -34,53 +35,29 @@ def generate_questions_from_paper(exam_paper_id):
         if exam_paper.extracted_text:
             content.append(f"Context: {exam_paper.extracted_text[:10000]}")
         elif exam_paper.file:
-            # Try to read via Cloudinary SDK for authenticated access
-            url = exam_paper.file.url
-            if url.startswith('http'):
-                import requests
-                import cloudinary
-                import cloudinary.utils
-                
-                # Use Cloudinary SDK to get a signed URL or handle auth
-                # Actually, the simplest reliable way for private files is to use the API Secret in headers
-                # or a signed download URL.
-                try:
-                    # Initialize cloudinary if not already done
-                    cloudinary.config(
-                        cloud_name=settings.CLOUDINARY_STORAGE['CLOUD_NAME'],
-                        api_key=settings.CLOUDINARY_STORAGE['API_KEY'],
-                        api_secret=settings.CLOUDINARY_STORAGE['API_SECRET']
-                    )
-                    
-                    # If it's a private resource, we need a signed URL
-                    # We extract the public_id from the URL or metadata if possible
-                    # But since we have the URL and it's 401ing, let's try direct auth again 
-                    # with a more robust check.
-                    
-                    from requests.auth import HTTPBasicAuth
-                    auth = HTTPBasicAuth(settings.CLOUDINARY_STORAGE['API_KEY'], settings.CLOUDINARY_STORAGE['API_SECRET'])
-                    response = requests.get(url, auth=auth)
-                    
-                    if response.status_code == 200:
-                        pdf_data = response.content
-                    else:
-                        # If still 401, try without auth but as a signed URL via SDK
-                        # This assumes the file might be private/authenticated
-                        # We'll try to use the raw file read as a final fallback
-                        exam_paper.file.open('rb')
-                        pdf_data = exam_paper.file.read()
-                        exam_paper.file.close()
-                except Exception as sdk_err:
-                    logger.error(f"Cloudinary SDK/Request error: {sdk_err}")
-                    exam_paper.file.open('rb')
-                    pdf_data = exam_paper.file.read()
-                    exam_paper.file.close()
-            else:
-                # Local file fallback
+            # Use Django's storage backend to read the file
+            try:
                 exam_paper.file.open('rb')
                 pdf_data = exam_paper.file.read()
                 exam_paper.file.close()
-                
+            except Exception as e:
+                logger.error(f"Error reading file from storage: {e}")
+                # AUTHENTICATED FALLBACK FOR CLOUDINARY 401 ERRORS
+                import requests
+                from requests.auth import HTTPBasicAuth
+                url = exam_paper.file.url
+                if url.startswith('http'):
+                    auth = HTTPBasicAuth(
+                        settings.CLOUDINARY_STORAGE['API_KEY'], 
+                        settings.CLOUDINARY_STORAGE['API_SECRET']
+                    )
+                    response = requests.get(url, auth=auth, timeout=20)
+                    if response.status_code == 200:
+                        pdf_data = response.content
+                    else:
+                        raise ValueError(f"Analysis Failed: Unable to access physical document (HTTP {response.status_code})")
+                else:
+                    raise e
             content.append({'mime_type': 'application/pdf', 'data': pdf_data})
         else:
             raise ValueError("No text or file available for processing")
@@ -88,7 +65,7 @@ def generate_questions_from_paper(exam_paper_id):
         response = model.generate_content(content)
         text = response.text.strip()
         
-        # Super-robust JSON extraction
+        # Robust JSON extraction
         if '```json' in text:
             text = text.split('```json')[1].split('```')[0].strip()
         elif '```' in text:
@@ -101,7 +78,7 @@ def generate_questions_from_paper(exam_paper_id):
         for q in questions_list:
             Question.objects.create(
                 subject=exam_paper.subject,
-                school=exam_paper.school, # LINK TO YOUR SCHOOL
+                school=exam_paper.school,
                 created_by=exam_paper.uploaded_by,
                 question_type=str(q.get('question_type', 'MCQ')).upper(),
                 question_text=q.get('question_text', 'Sample Question'),
@@ -109,9 +86,9 @@ def generate_questions_from_paper(exam_paper_id):
                 option_b=q.get('option_b', 'Option B'),
                 option_c=q.get('option_c', 'Option C'),
                 option_d=q.get('option_d', 'Option D'),
-                correct_answer=q.get('correct_answer', 'A'),
+                correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
                 model_answer=q.get('model_answer', ''),
-                marks=q.get('marks', 1),
+                marks=int(q.get('marks', 1)),
                 difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
             )
             created_count += 1
@@ -125,21 +102,27 @@ def generate_questions_from_paper(exam_paper_id):
         exam_paper.generation_error = str(e)
         exam_paper.save()
         logger.error(f"Error: {e}")
+        raise e
 
 def generate_paper_from_multiple(paper_ids, instructions, subject, school, teacher, **kwargs):
-    for pid in paper_ids:
-        generate_questions_from_paper(pid)
-    return {'success': True, 'questions_count': 0}
+    try:
+        for pid in paper_ids:
+            generate_questions_from_paper(pid)
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
 
 def generate_questions_from_instructions(subject, chapters, topics, marks_distribution, total_marks, school, teacher):
-    # This creates a dummy paper to trigger the same logic
     from .models import ExamPaper
-    paper = ExamPaper.objects.create(
-        title=f"AI Generated - {subject.name}",
-        subject=subject,
-        school=school,
-        uploaded_by=teacher,
-        extracted_text=f"Topics: {topics}"
-    )
-    generate_questions_from_paper(paper.id)
-    return {'success': True, 'questions_count': 10}
+    try:
+        paper = ExamPaper.objects.create(
+            title=f"AI Generated - {subject.name}",
+            subject=subject,
+            school=school,
+            uploaded_by=teacher,
+            extracted_text=f"Topics: {topics}"
+        )
+        generate_questions_from_paper(paper.id)
+        return {'success': True}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
