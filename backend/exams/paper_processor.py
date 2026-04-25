@@ -35,7 +35,7 @@ def _retrieve_file_data(file_field):
     
     debug_log = []
 
-    # TRY 1: Native open
+    # 1. Native open
     try:
         file_field.open('rb')
         data = file_field.read()
@@ -44,7 +44,7 @@ def _retrieve_file_data(file_field):
     except Exception as e:
         debug_log.append(f"Native: {str(e)}")
 
-    # TRY 2: Cloudinary SDK
+    # 2. Optimized Cloudinary SDK
     if 'cloudinary' in url.lower():
         try:
             keys = settings.CLOUDINARY_STORAGE
@@ -66,22 +66,21 @@ def _retrieve_file_data(file_field):
                             public_id, sign_url=True, secure=True,
                             resource_type=r_type, type=d_type
                         )
-                        resp = requests.get(signed_url, timeout=20)
+                        resp = requests.get(signed_url, timeout=10)
                         if resp.status_code == 200:
                             return resp.content, mime, f"Success (SDK {r_type}/{d_type})"
                     except: continue
         except Exception as e:
             debug_log.append(f"Cloudinary Logic: {str(e)}")
 
-    # TRY 3: HTTP
-    if url.startswith('http'):
-        try:
-            resp = requests.get(url, timeout=20, allow_redirects=True)
-            if resp.status_code == 200:
-                return resp.content, mime, "Success (HTTP)"
-            debug_log.append(f"HTTP: Error {resp.status_code}")
-        except Exception as e:
-            debug_log.append(f"HTTP: {str(e)}")
+    # 3. Direct HTTP
+    try:
+        resp = requests.get(url, timeout=10, allow_redirects=True)
+        if resp.status_code == 200:
+            return resp.content, mime, "Success (HTTP)"
+        debug_log.append(f"HTTP: {resp.status_code}")
+    except Exception as e:
+        debug_log.append(f"HTTP: {str(e)}")
 
     return None, None, " | ".join(debug_log)
 
@@ -100,58 +99,32 @@ def _extract_json(text):
 
 def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
     try:
-        import time
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         
-        exam_paper.generation_error = 'Step 1/3: Reading document...'
+        exam_paper.generation_error = '[PROGRESS] Reading your paper...'
         exam_paper.save()
 
         api_key = settings.GEMINI_API_KEY
-        if not api_key or api_key.startswith('sk-ant-'):
-            raise ValueError("Invalid Gemini API Key.")
+        if not api_key: raise ValueError("Gemini API Key missing.")
 
         data, mime, debug_info = _retrieve_file_data(exam_paper.file)
-        if not data:
-            raise ValueError(f"File Retrieval Failed: {debug_info}")
+        if not data: raise ValueError(f"Retrieval failed: {debug_info}")
 
-        models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']
-        response_text = None
-        
-        for model_name in models_to_try:
-            try:
-                exam_paper.generation_error = f'Step 2/3: AI is processing ({model_name})...'
-                exam_paper.save()
-                
-                genai.configure(api_key=api_key)
-                model = genai.GenerativeModel(model_name)
-                
-                prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
-                if instructions: prompt += f"\nSpecific Instructions: {instructions}"
-                prompt += '\nReturn ONLY a JSON object with a "questions" key.'
-                
-                response = model.generate_content([prompt, {'mime_type': mime, 'data': data}])
-                response_text = response.text.strip()
-                if response_text: break # Success
-                
-            except Exception as e:
-                err_msg = str(e)
-                if "429" in err_msg:
-                    exam_paper.generation_error = f'AI Busy (Rate Limit)... Waiting 10s to retry...'
-                    exam_paper.save()
-                    time.sleep(10)
-                    # Continue to next model or retry current
-                    continue
-                logger.warning(f"Model {model_name} failed: {err_msg}")
-                continue
-
-        if not response_text:
-            raise ValueError("All AI models are currently busy or unavailable. Please try again in 1 minute.")
-
-        exam_paper.generation_error = 'Step 3/3: Saving to database...'
+        exam_paper.generation_error = '[PROGRESS] AI is thinking (30s)...'
         exam_paper.save()
 
-        data = _extract_json(response_text)
+        model = get_gemini_model(api_key)
+        prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
+        if instructions: prompt += f"\nSpecific Instructions: {instructions}"
+        prompt += '\nReturn ONLY a JSON object with a "questions" key.'
+        
+        response = model.generate_content([prompt, {'mime_type': mime, 'data': data}])
+        
+        exam_paper.generation_error = '[PROGRESS] Saving questions...'
+        exam_paper.save()
+
+        data = _extract_json(response.text)
         if not data or not data.get('questions'):
             raise ValueError("AI returned no questions.")
 
@@ -160,11 +133,9 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
             for q in data['questions']:
                 try:
                     Question.objects.create(
-                        subject=exam_paper.subject,
-                        school=exam_paper.school,
-                        created_by=exam_paper.uploaded_by,
+                        subject=exam_paper.subject, school=exam_paper.school, created_by=exam_paper.uploaded_by,
                         question_type=str(q.get('question_type', 'MCQ')).upper(),
-                        question_text=q.get('question_text', 'Sample Question'),
+                        question_text=q.get('question_text', 'Sample'),
                         option_a=str(q.get('option_a', ''))[:500],
                         option_b=str(q.get('option_b', ''))[:500],
                         option_c=str(q.get('option_c', ''))[:500],
@@ -177,10 +148,8 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
                     created_count += 1
                 except: continue
         
-        if created_count == 0: raise ValueError("No valid questions saved.")
-
-        exam_paper.questions_generated = True
-        exam_paper.generation_error = ''
+        exam_paper.questions_generated = (created_count > 0)
+        exam_paper.generation_error = '' if created_count > 0 else 'Failed to save questions.'
         exam_paper.save()
         
     except Exception as e:
@@ -241,7 +210,6 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
             return {'success': True}
         return {'success': False, 'error': 'No questions saved'}
     except Exception as e:
-        papers.update(generation_error=str(e))
         return {'success': False, 'error': str(e)}
 
 def generate_questions_from_instructions(subject, chapters, topics, marks_distribution, total_marks, school, teacher):
