@@ -1,5 +1,5 @@
 """
-Process handwritten answer sheets using Claude Vision API.
+Process handwritten answer sheets using Gemini Vision API.
 Reads both the question paper and student's handwritten answers,
 grades each answer, and returns per-question analysis.
 """
@@ -7,6 +7,8 @@ import base64
 import json
 import logging
 import mimetypes
+import requests
+from requests.auth import HTTPBasicAuth
 
 from django.conf import settings
 
@@ -22,34 +24,30 @@ def _encode_file(file_field):
     if not mime:
         mime = 'application/octet-stream'
         
-    if url.startswith('http'):
-        import requests
-        from requests.auth import HTTPBasicAuth
-        try:
-            # Use credentials from settings
-            cloudinary_config = settings.CLOUDINARY_STORAGE
-            auth = HTTPBasicAuth(cloudinary_config['API_KEY'], cloudinary_config['API_SECRET'])
-            
-            response = requests.get(url, auth=auth)
-            if response.status_code == 200:
-                data = response.content
-            else:
-                # Fallback to standard open
-                file_field.open('rb')
-                data = file_field.read()
-                file_field.close()
-        except Exception as e:
-            logger.error(f"Error fetching remote file {url}: {e}")
-            file_field.open('rb')
-            data = file_field.read()
-            file_field.close()
-    else:
-        # Local file
+    # ATTEMPT 1: Native Storage Read (Best for django-cloudinary-storage)
+    try:
         file_field.open('rb')
         data = file_field.read()
         file_field.close()
+        return data, mime
+    except Exception as e:
+        logger.warning(f"Native storage read failed, trying URL: {e}")
         
-    return data, mime
+    # ATTEMPT 2: Authenticated URL fetch (Fallback for Cloudinary 401s)
+    if url.startswith('http'):
+        try:
+            cloudinary_config = settings.CLOUDINARY_STORAGE
+            auth = HTTPBasicAuth(cloudinary_config['API_KEY'], cloudinary_config['API_SECRET'])
+            response = requests.get(url, auth=auth, timeout=20)
+            if response.status_code == 200:
+                return response.content, mime
+            else:
+                raise ValueError(f"URL fetch failed with status {response.status_code}")
+        except Exception as e:
+            logger.error(f"Authenticated URL fetch failed for {url}: {e}")
+            raise e
+            
+    raise ValueError(f"Could not read document at {url}")
 
 
 def _build_document_block(data, media_type):
@@ -59,14 +57,7 @@ def _build_document_block(data, media_type):
 
 def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
     """
-    Grade a handwritten answer sheet against a question paper using Claude Vision.
-
-    1. Load HandwrittenExam, set status PROCESSING
-    2. Encode both files as base64
-    3. Send to Claude Vision API
-    4. Parse JSON response, save grading_data
-    5. Calculate obtained_marks and percentage
-    6. Set status GRADED (or FAILED)
+    Grade a handwritten answer sheet against a question paper using Gemini.
     """
     try:
         exam = HandwrittenExam.objects.get(id=handwritten_exam_id)
@@ -88,131 +79,43 @@ def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('models/gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
-        # Encode both files
+        # Encode both files with robust logic
         qp_data, qp_mime = _encode_file(exam.question_paper)
         ans_data, ans_mime = _encode_file(exam.answer_sheet)
 
-        if include_analysis:
-            prompt_text = f"""You are an expert exam grader. You have been given two documents:
-
-1. DOCUMENT 1: The question paper / answer key
-2. DOCUMENT 2: A student's handwritten answer sheet
-
-Your task:
-- Read the question paper to identify all questions and their correct answers.
-- Read the handwritten answer sheet carefully and transcribe the student's answers.
-- Grade each answer against the correct answer/key.
-- Provide detailed analysis of the student's performance.
-- Total marks for this exam: {exam.total_marks}
-
-Return ONLY valid JSON (no markdown, no code fences):
-{{
-  "questions": [
-    {{
-      "question_number": 1,
-      "question_text": "The question as written on the paper",
-      "max_marks": 5,
-      "student_answer": "Transcribed handwritten answer from the student",
-      "correct_answer": "The correct/expected answer",
-      "marks_awarded": 4,
-      "feedback": "Detailed feedback explaining why marks were awarded or deducted"
-    }}
-  ],
-  "total_obtained": 42,
-  "total_possible": {exam.total_marks},
-  "overall_feedback": "Detailed overall assessment of the student's performance",
-  "strengths": ["List of areas where the student performed well"],
-  "weaknesses": ["List of areas needing improvement"],
-  "recommendations": ["Specific study recommendations for the student"]
-}}
-
-IMPORTANT:
-- Transcribe the student's handwriting as accurately as possible
-- Award partial marks where the answer is partially correct
-- Be fair but strict in grading
-- If you cannot read certain handwriting, note it in the feedback
-- Ensure total_obtained equals the sum of all marks_awarded
-- Provide meaningful strengths, weaknesses, and actionable recommendations"""
-        else:
-            prompt_text = f"""You are an expert exam grader. You have been given two documents:
-
-1. DOCUMENT 1: The question paper / answer key
-2. DOCUMENT 2: A student's handwritten answer sheet
-
-Your task:
-- Read the question paper to identify all questions and their correct answers.
-- Read the handwritten answer sheet carefully and transcribe the student's answers.
-- Grade each answer against the correct answer/key.
-- Total marks for this exam: {exam.total_marks}
-
-Return ONLY valid JSON (no markdown, no code fences):
-{{
-  "questions": [
-    {{
-      "question_number": 1,
-      "question_text": "The question as written on the paper",
-      "max_marks": 5,
-      "student_answer": "Transcribed handwritten answer from the student",
-      "correct_answer": "The correct/expected answer",
-      "marks_awarded": 4,
-      "feedback": "Brief feedback on the answer"
-    }}
-  ],
-  "total_obtained": 42,
-  "total_possible": {exam.total_marks},
-  "overall_feedback": "Brief overall assessment of the student's performance"
-}}
-
-IMPORTANT:
-- Transcribe the student's handwriting as accurately as possible
-- Award partial marks where the answer is partially correct
-- Be fair but strict in grading
-- If you cannot read certain handwriting, note it in the feedback
-- Ensure total_obtained equals the sum of all marks_awarded"""
+        prompt_text = f"""You are an expert exam grader. Grade this student's handwritten answer sheet against the provided question paper/answer key.
+        Total marks: {exam.total_marks}
+        Return ONLY valid JSON with a "questions" list and "total_obtained" key."""
 
         content = [
             _build_document_block(qp_data, qp_mime),
-            "Above is the QUESTION PAPER / ANSWER KEY.",
+            "Above is the QUESTION PAPER.",
             _build_document_block(ans_data, ans_mime),
             "Above is the STUDENT'S HANDWRITTEN ANSWER SHEET.",
             prompt_text,
         ]
 
         response = model.generate_content(content)
-
         response_text = response.text.strip()
-        # Strip markdown code fences e.g. ```json ... ```
-        if response_text.startswith('```'):
-            # Remove opening fence + optional language tag
-            response_text = response_text[response_text.find('\n') + 1:]
-            # Remove closing fence
-            if response_text.endswith('```'):
-                response_text = response_text[:-3]
-            response_text = response_text.strip()
+        
+        # Clean JSON
+        if '```json' in response_text:
+            response_text = response_text.split('```json')[1].split('```')[0].strip()
+        elif '```' in response_text:
+            response_text = response_text.split('```')[1].split('```')[0].strip()
+            
         result = json.loads(response_text)
 
-        # Save grading data
+        # Save results
         exam.grading_data = result
         total_obtained = result.get('total_obtained', 0)
-        total_possible = result.get('total_possible', exam.total_marks)
-
         exam.obtained_marks = float(total_obtained)
-        exam.percentage = round(
-            (float(total_obtained) / float(total_possible) * 100) if total_possible > 0 else 0,
-            1,
-        )
+        exam.percentage = round((float(total_obtained) / float(exam.total_marks) * 100), 1)
         exam.status = 'GRADED'
-        exam.error_message = ''
         exam.save()
-        logger.info(f"Graded handwritten exam {handwritten_exam_id}: {total_obtained}/{total_possible}")
 
-    except json.JSONDecodeError as e:
-        exam.status = 'FAILED'
-        exam.error_message = f'Failed to parse AI response: {e}'
-        exam.save()
-        logger.error(f"JSON parse error for handwritten exam {handwritten_exam_id}: {e}")
     except Exception as e:
         exam.status = 'FAILED'
         exam.error_message = f'Grading failed: {str(e)}'

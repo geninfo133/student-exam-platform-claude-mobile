@@ -23,10 +23,11 @@ def generate_questions_from_paper(exam_paper_id):
     try:
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         api_key = settings.GEMINI_API_KEY
-        if not api_key: return
+        if not api_key: 
+            raise ValueError("GEMINI_API_KEY not configured")
 
         model = get_gemini_model(api_key)
-        # Detailed prompt to ensure JSON format
+        
         prompt = f"""Generate 20 MCQ, 5 Short, and 4 Long questions for Class 10 {exam_paper.subject.name}.
         Return ONLY a JSON object with a "questions" key. 
         Each question must have: question_type (MCQ/SHORT/LONG), question_text, marks, and difficulty."""
@@ -35,37 +36,31 @@ def generate_questions_from_paper(exam_paper_id):
         if exam_paper.extracted_text:
             content.append(f"Context: {exam_paper.extracted_text[:10000]}")
         elif exam_paper.file:
-            # Use Django's storage backend to read the file
+            # SUPER-ROBUST READ: Use Django's .open('rb') to leverage internal storage auth
             try:
                 exam_paper.file.open('rb')
                 pdf_data = exam_paper.file.read()
                 exam_paper.file.close()
+                content.append({'mime_type': 'application/pdf', 'data': pdf_data})
             except Exception as e:
-                logger.error(f"Error reading file from storage: {e}")
-                # AUTHENTICATED FALLBACK FOR CLOUDINARY 401 ERRORS
+                logger.error(f"Native storage read failed for {exam_paper.id}: {e}")
+                # Fallback to authenticated request for Cloudinary
                 import requests
                 from requests.auth import HTTPBasicAuth
                 url = exam_paper.file.url
-                if url.startswith('http'):
-                    auth = HTTPBasicAuth(
-                        settings.CLOUDINARY_STORAGE['API_KEY'], 
-                        settings.CLOUDINARY_STORAGE['API_SECRET']
-                    )
-                    response = requests.get(url, auth=auth, timeout=20)
-                    if response.status_code == 200:
-                        pdf_data = response.content
-                    else:
-                        raise ValueError(f"Analysis Failed: Unable to access physical document (HTTP {response.status_code})")
+                auth = HTTPBasicAuth(settings.CLOUDINARY_STORAGE['API_KEY'], settings.CLOUDINARY_STORAGE['API_SECRET'])
+                response = requests.get(url, auth=auth, timeout=20)
+                if response.status_code == 200:
+                    content.append({'mime_type': 'application/pdf', 'data': response.content})
                 else:
-                    raise e
-            content.append({'mime_type': 'application/pdf', 'data': pdf_data})
+                    raise ValueError(f"Analysis Failed: Unable to access physical document (HTTP {response.status_code})")
         else:
             raise ValueError("No text or file available for processing")
 
         response = model.generate_content(content)
         text = response.text.strip()
         
-        # Robust JSON extraction
+        # Robust JSON cleaning
         if '```json' in text:
             text = text.split('```json')[1].split('```')[0].strip()
         elif '```' in text:
@@ -74,6 +69,9 @@ def generate_questions_from_paper(exam_paper_id):
         data = json.loads(text)
         questions_list = data.get('questions', [])
         
+        if not questions_list:
+            raise ValueError("AI failed to generate questions. Please try again.")
+
         created_count = 0
         for q in questions_list:
             Question.objects.create(
@@ -101,7 +99,7 @@ def generate_questions_from_paper(exam_paper_id):
     except Exception as e:
         exam_paper.generation_error = str(e)
         exam_paper.save()
-        logger.error(f"Error: {e}")
+        logger.error(f"Generation Error: {e}")
         raise e
 
 def generate_paper_from_multiple(paper_ids, instructions, subject, school, teacher, **kwargs):
