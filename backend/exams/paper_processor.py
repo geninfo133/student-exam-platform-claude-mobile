@@ -19,15 +19,15 @@ logger = logging.getLogger(__name__)
 
 def get_gemini_model(api_key):
     genai.configure(api_key=api_key)
-    models_to_try = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-flash-latest']
+    models_to_try = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest']
     for model_name in models_to_try:
         try:
             return genai.GenerativeModel(model_name)
         except: continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
-def _retrieve_file_data(file_field, paper_obj=None):
-    """Ultra-fast file retrieval using session pooling and prioritized public access."""
+def _retrieve_file_data(file_field):
+    """Silent, high-speed file retrieval. No database hits here."""
     url = file_field.url
     mime, _ = mimetypes.guess_type(url)
     if not mime:
@@ -39,46 +39,38 @@ def _retrieve_file_data(file_field, paper_obj=None):
     keys = settings.CLOUDINARY_STORAGE
     exts = ["", ".png", ".pdf", ".jpg"]
 
-    # --- PHASE 1: TRY ALL PUBLIC LINKS FIRST (FASTEST) ---
+    # 1. Fast Public Check (using HEAD first)
     for ext in exts:
-        if paper_obj:
-            paper_obj.generation_error = f'[PROGRESS] Checking public {ext if ext else "link"}...'
-            paper_obj.save()
         try:
-            resp = session.get(f"{url}{ext}", timeout=2)
-            if resp.status_code == 200:
-                return resp.content, mime, f"Public-{ext}"
+            test_url = f"{url}{ext}"
+            # Head request is instant - just checks if file exists
+            if session.head(test_url, timeout=3, allow_redirects=True).status_code == 200:
+                resp = session.get(test_url, timeout=5)
+                if resp.status_code == 200:
+                    return resp.content, mime, f"Public-{ext}"
         except: continue
 
-    # --- PHASE 2: TRY SECURE SDK ACCESS (ONLY IF PUBLIC FAILED) ---
+    # 2. Secure SDK Access
     if 'cloudinary' in url.lower() and keys.get('API_SECRET'):
-        cloudinary.config(cloud_name=keys['CLOUD_NAME'], api_key=keys['API_KEY'], api_secret=keys['API_SECRET'], secure=True)
-        
-        # Extract Public ID
         try:
+            cloudinary.config(cloud_name=keys['CLOUD_NAME'], api_key=keys['API_KEY'], api_secret=keys['API_SECRET'], secure=True)
             public_id = url.split('/upload/')[-1]
             if '/private/' in url: public_id = url.split('/private/')[-1]
             if '/authenticated/' in url: public_id = url.split('/authenticated/')[-1]
             public_id = re.sub(r'^v\d+/', '', public_id).rsplit('.', 1)[0]
-        except:
-            public_id = url.split('/')[-1].rsplit('.', 1)[0]
 
-        for ext in exts:
-            if paper_obj:
-                paper_obj.generation_error = f'[PROGRESS] Verifying secure access ({ext if ext else "direct"})...'
-                paper_obj.save()
-            
-            for r_type in ['image', 'raw']:
-                try:
-                    signed_url, _ = cloudinary.utils.cloudinary_url(
-                        f"{public_id}{ext}", sign_url=True, secure=True, resource_type=r_type
-                    )
-                    resp = session.get(signed_url, timeout=3)
-                    if resp.status_code == 200:
-                        return resp.content, mime, f"Signed-{r_type}{ext}"
-                except: continue
+            for ext in exts:
+                for r_type in ['image', 'raw']:
+                    try:
+                        s_url, _ = cloudinary.utils.cloudinary_url(f"{public_id}{ext}", sign_url=True, secure=True, resource_type=r_type)
+                        if session.head(s_url, timeout=3).status_code == 200:
+                            resp = session.get(s_url, timeout=5)
+                            if resp.status_code == 200:
+                                return resp.content, mime, f"Signed-{r_type}{ext}"
+                    except: continue
+        except: pass
 
-    return None, None, "File not found or access denied by Cloudinary"
+    return None, None, "File not found or access denied"
 
 def _extract_json(text):
     text = text.strip()
@@ -86,7 +78,7 @@ def _extract_json(text):
     elif '```' in text: text = text.split('```')[1].split('```')[0].strip()
     try:
         return json.loads(text)
-    except json.JSONDecodeError:
+    except:
         start, end = text.find('{'), text.rfind('}')
         if start != -1 and end != -1:
             try: return json.loads(text[start:end+1])
@@ -95,31 +87,37 @@ def _extract_json(text):
 
 def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
     try:
+        # Step 0: Ensure clean DB connection
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         
-        api_key = settings.GEMINI_API_KEY
-        data, mime, debug_info = _retrieve_file_data(exam_paper.file, exam_paper)
+        # Step 1: Read File
+        exam_paper.generation_error = '[PROGRESS] Reading your paper...'
+        exam_paper.save()
         
-        if not data: 
-            raise ValueError(f"Cloudinary Error: {debug_info}")
+        data, mime, debug_info = _retrieve_file_data(exam_paper.file)
+        if not data:
+            raise ValueError(f"Could not read your paper. Please ensure the upload was successful and use a standard format (.jpg, .png, or .pdf). Details: {debug_info}")
 
-        exam_paper.generation_error = '[PROGRESS] AI is thinking (30s)...'
+        # Step 2: AI Generation
+        exam_paper.generation_error = '[PROGRESS] AI is thinking (this takes 30-60s)...'
         exam_paper.save()
 
+        api_key = settings.GEMINI_API_KEY
         model = get_gemini_model(api_key)
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
         if instructions: prompt += f"\nSpecific Instructions: {instructions}"
-        prompt += '\nReturn ONLY a JSON object with a "questions" key.'
+        prompt += '\nReturn ONLY a JSON object with a "questions" key containing the list of questions.'
         
         response = model.generate_content([prompt, {'mime_type': mime, 'data': data}])
         
-        exam_paper.generation_error = '[PROGRESS] Saving questions...'
+        # Step 3: Save Questions
+        exam_paper.generation_error = '[PROGRESS] Finalizing questions...'
         exam_paper.save()
 
         data = _extract_json(response.text)
         if not data or not data.get('questions'):
-            raise ValueError("AI returned no questions. Please check the document content.")
+            raise ValueError("The AI could not read the content of this specific file. Please try re-uploading a clearer image or a PDF.")
 
         created_count = 0
         with transaction.atomic():
@@ -141,18 +139,20 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
                     created_count += 1
                 except: continue
         
-        exam_paper.questions_generated = (created_count > 0)
-        exam_paper.generation_error = '[SUCCESS] Done! Questions are saved to your Question Bank.' if created_count > 0 else 'Failed to save questions.'
+        if created_count == 0: raise ValueError("Database error: could not save any questions.")
+
+        exam_paper.questions_generated = True
+        exam_paper.generation_error = '[SUCCESS] Done! Questions added to your Question Bank.'
         exam_paper.save()
         
     except Exception as e:
+        logger.error(f"Generation Error: {e}")
         try:
             db.connections.close_all()
             ep = ExamPaper.objects.get(id=exam_paper_id)
             ep.generation_error = str(e)
             ep.save()
         except: pass
-        raise e
 
 def generate_paper_from_multiple(paper_ids, instructions, subject, school, teacher, **kwargs):
     try:
@@ -163,15 +163,13 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
         
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {subject.name}."
         if instructions: prompt += f"\nInstructions: {instructions}"
-        prompt += '\nReturn ONLY JSON with a "questions" key.'
+        prompt += '\nReturn ONLY JSON.'
         
         content = [prompt]
         papers = ExamPaper.objects.filter(id__in=paper_ids)
         for paper in papers:
-            if paper.extracted_text: content.append(f"Context: {paper.extracted_text[:5000]}")
-            else:
-                p_data, p_mime, _ = _retrieve_file_data(paper.file)
-                if p_data: content.append({'mime_type': p_mime, 'data': p_data})
+            p_data, p_mime, _ = _retrieve_file_data(paper.file)
+            if p_data: content.append({'mime_type': p_mime, 'data': p_data})
 
         response = model.generate_content(content)
         data = _extract_json(response.text)
@@ -198,9 +196,9 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
                     except: continue
         
         if created_count > 0:
-            papers.update(questions_generated=True, generation_error='[SUCCESS] Done! Questions added to Question Bank.')
+            papers.update(questions_generated=True, generation_error='[SUCCESS] Done!')
             return {'success': True}
-        return {'success': False, 'error': 'No questions saved'}
+        return {'success': False, 'error': 'AI failed'}
     except Exception as e:
         return {'success': False, 'error': str(e)}
 
@@ -214,7 +212,7 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {subject.name}."
         if chapters: prompt += f"\nChapters: {', '.join([c.name for c in chapters])}"
         if topics: prompt += f"\nFocus: {topics}"
-        prompt += '\nReturn ONLY JSON with a "questions" key.'
+        prompt += '\nReturn ONLY JSON.'
         
         response = model.generate_content(prompt)
         data = _extract_json(response.text)
