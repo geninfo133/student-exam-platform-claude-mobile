@@ -5,11 +5,8 @@ import json
 import logging
 import mimetypes
 import requests
-from requests.auth import HTTPBasicAuth
 import google.generativeai as genai
 from django.conf import settings
-import cloudinary
-import cloudinary.api
 from .models import ExamPaper, Question
 
 logger = logging.getLogger(__name__)
@@ -30,65 +27,36 @@ def _retrieve_file_data(file_field):
     if not mime:
         mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
         
-    # TRY 1: Native Django file open
+    # TRY 1: Native Django file open (for local storage)
     try:
         file_field.open('rb')
         data = file_field.read()
         file_field.close()
         if data:
+            logger.info(f"Successfully opened file locally: {url}")
             return data, mime
     except Exception as e:
         logger.warning(f"Native open failed: {e}")
 
-    # TRY 2: Cloudinary API Fetch (High Privilege)
-    if 'cloudinary' in url.lower():
-        try:
-            import cloudinary
-            import cloudinary.api
-            import re
-            
-            cloudinary.config(
-                cloud_name=settings.CLOUDINARY_STORAGE['CLOUD_NAME'],
-                api_key=settings.CLOUDINARY_STORAGE['API_KEY'],
-                api_secret=settings.CLOUDINARY_STORAGE['API_SECRET']
-            )
-            
-            # Extract Public ID correctly
-            public_id = url
-            if '/upload/' in url:
-                path_after_upload = url.split('/upload/')[-1]
-                path_no_version = re.sub(r'^v\d+/', '', path_after_upload)
-                public_id = path_no_version.rsplit('.', 1)[0]
-            
-            # Use the API to get the secure content
-            # Cloudinary 'image' and 'raw' (PDF) resources are in different buckets
-            for r_type in ['image', 'raw']:
-                try:
-                    # Get resource info
-                    res_info = cloudinary.api.resource(public_id, resource_type=r_type)
-                    if res_info.get('secure_url'):
-                        # Fetch the file using Basic Auth on the secure URL
-                        from requests.auth import HTTPBasicAuth
-                        auth = HTTPBasicAuth(
-                            settings.CLOUDINARY_STORAGE['API_KEY'], 
-                            settings.CLOUDINARY_STORAGE['API_SECRET']
-                        )
-                        resp = requests.get(res_info['secure_url'], auth=auth, timeout=30)
-                        if resp.status_code == 200:
-                            logger.info(f"Fetched {public_id} via {r_type} API")
-                            return resp.content, mime
-                except: continue
-                
-        except Exception as e:
-            logger.warning(f"Cloudinary API retrieval failed: {e}")
-
-    # TRY 3: Simple HTTP request (Final Fallback)
+    # TRY 2: Simple HTTP request (Cloudinary public URLs don't need auth)
     if url.startswith('http'):
         try:
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=30, allow_redirects=True)
             if response.status_code == 200:
+                logger.info(f"Successfully downloaded file from {url}")
                 return response.content, mime
-        except: pass
+            elif response.status_code == 401:
+                logger.error(f"HTTP 401: File access denied at {url}. Check Cloudinary permissions.")
+                raise ValueError("Cloudinary file access denied. Ensure file is public or re-upload.")
+            else:
+                logger.error(f"HTTP {response.status_code} fetching {url}")
+                raise ValueError(f"Could not fetch file (HTTP {response.status_code})")
+        except requests.exceptions.Timeout:
+            logger.error(f"Request timeout while fetching {url}")
+            raise ValueError("Request timeout. Check internet connection.")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error: {e}")
+            raise ValueError(f"Network error: {str(e)}")
 
     return None, None
 

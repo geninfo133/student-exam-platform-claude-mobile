@@ -8,7 +8,6 @@ import json
 import logging
 import mimetypes
 import requests
-from requests.auth import HTTPBasicAuth
 
 from django.conf import settings
 
@@ -25,46 +24,39 @@ def _encode_file(file_field):
         mime = 'application/octet-stream'
         
     data = None
-    # 1. Native open
+    
+    # 1. Native Django file open (for local storage)
     try:
         file_field.open('rb')
         data = file_field.read()
         file_field.close()
+        if data:
+            logger.info(f"Successfully opened file locally")
+            return data, mime
     except Exception as e:
-        logger.warning(f"Handwritten native open failed: {e}")
+        logger.warning(f"Native open failed: {e}")
 
-    # 2. Simple unauthenticated request (Cloudinary public URLs don't need auth)
-    if not data:
-        if not url.startswith('http'):
-            logger.error(f"Cannot retrieve local file via HTTP: {url}")
-        else:
-            try:
-                from requests.auth import HTTPBasicAuth
-                auth = HTTPBasicAuth(
-                    settings.CLOUDINARY_STORAGE['API_KEY'], 
-                    settings.CLOUDINARY_STORAGE['API_SECRET']
-                )
-                response = requests.get(url, auth=auth, timeout=30, allow_redirects=True)
-                if response.status_code == 200:
-                    data = response.content
-                    logger.info(f"Successfully downloaded file from {url}")
-                elif response.status_code == 401:
-                    logger.error(f"HTTP 401 Unauthorized: Cloudinary free trial may have expired or file is private. URL: {url}")
-                    raise ValueError("Access denied to file. Check Cloudinary account status and file permissions.")
-                elif response.status_code == 404:
-                    logger.error(f"HTTP 404 Not Found fetching {url}")
-                    raise ValueError(f"File not found at {url}")
-                else:
-                    logger.error(f"HTTP {response.status_code} fetching {url}")
-                    raise ValueError(f"HTTP {response.status_code}: Unable to access document at {url}")
-            except requests.exceptions.RequestException as req_err:
-                logger.error(f"Network error downloading file from {url}: {req_err}")
-                raise ValueError(f"Network error: Could not download file. Check your internet connection.")
+    # 2. Simple HTTP request (Cloudinary public URLs)
+    if url.startswith('http'):
+        try:
+            response = requests.get(url, timeout=30, allow_redirects=True)
+            if response.status_code == 200:
+                logger.info(f"Successfully downloaded file from {url}")
+                return response.content, mime
+            elif response.status_code == 401:
+                logger.error(f"HTTP 401: File access denied at {url}")
+                raise ValueError("File access denied. Check Cloudinary permissions.")
+            else:
+                logger.error(f"HTTP {response.status_code} fetching {url}")
+                raise ValueError(f"Could not fetch file (HTTP {response.status_code})")
+        except requests.exceptions.Timeout:
+            logger.error(f"Request timeout while fetching {url}")
+            raise ValueError("Request timeout. Check internet connection.")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Network error: {e}")
+            raise ValueError(f"Network error: {str(e)}")
             
-    if not data:
-        raise ValueError(f"Could not read document at {url}")
-        
-    return data, mime
+    raise ValueError(f"Could not read document at {url}")
 
 
 def _build_document_block(data, media_type):
