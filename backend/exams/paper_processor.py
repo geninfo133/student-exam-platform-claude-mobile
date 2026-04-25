@@ -93,21 +93,38 @@ def _retrieve_file_data(file_field):
 
     return None, None
 
+def _extract_json(text):
+    """Robustly extract JSON from AI response text."""
+    text = text.strip()
+    if '```json' in text:
+        text = text.split('```json')[1].split('```')[0].strip()
+    elif '```' in text:
+        text = text.split('```')[1].split('```')[0].strip()
+    
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Final fallback: find the first { and last }
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1:
+            try:
+                return json.loads(text[start:end+1])
+            except: pass
+    return None
+
 def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
     try:
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         api_key = settings.GEMINI_API_KEY
         if not api_key: 
-            logger.error("GEMINI_API_KEY not configured")
-            raise ValueError("Gemini API key not configured. Please contact administrator.")
+            raise ValueError("Gemini API key not configured.")
         
         if api_key.startswith('sk-ant-'):
-            logger.error("Anthropic API key provided instead of Gemini key")
-            raise ValueError("Invalid API key format: You have provided an Anthropic (Claude) key starting with 'sk-ant-'. Please provide a Google Gemini API key (starting with 'AIza').")
+            raise ValueError("Invalid API key format: An Anthropic key was provided instead of a Gemini key.")
 
         model = get_gemini_model(api_key)
         
-        # Build prompt
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
         if instructions:
             prompt += f"\nSpecific Instructions: {instructions}"
@@ -124,74 +141,64 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
             if pdf_data:
                 content.append({'mime_type': mime, 'data': pdf_data})
             else:
-                raise ValueError("Could not retrieve document data. Check storage settings and file permissions.")
-        else:
-            raise ValueError("No text or file available for processing")
-
+                raise ValueError("Could not retrieve document data.")
+        
+        logger.info(f"Sending request to Gemini for paper {exam_paper_id}...")
         response = model.generate_content(content)
         
-        # Safety check for response
         try:
             text = response.text.strip()
         except Exception as e:
-            if hasattr(response, 'candidates') and response.candidates:
-                candidate = response.candidates[0]
-                if candidate.finish_reason != 1:
-                    raise ValueError(f"AI generation failed (Reason: {candidate.finish_reason}). Try simplifying your instructions.")
-            raise ValueError(f"AI generation error: {str(e)}")
+            logger.error(f"Gemini Response Error: {e}")
+            raise ValueError(f"AI generation error: The AI blocked the request or failed to respond. (Reason: {str(e)})")
         
-        if '```json' in text:
-            text = text.split('```json')[1].split('```')[0].strip()
-        elif '```' in text:
-            text = text.split('```')[1].split('```')[0].strip()
-            
-        try:
-            data = json.loads(text)
-        except json.JSONDecodeError:
-            # Fallback: try to find first { and last }
-            start = text.find('{')
-            end = text.rfind('}')
-            if start != -1 and end != -1:
-                data = json.loads(text[start:end+1])
-            else:
-                raise ValueError("Failed to parse AI response. Please try again.")
+        data = _extract_json(text)
+        if not data:
+            logger.error(f"JSON Parsing failed. Raw response: {text}")
+            raise ValueError("Failed to parse AI response. The AI did not return a valid JSON format.")
 
         questions_list = data.get('questions', [])
         if not questions_list:
-            raise ValueError("AI did not generate any questions. Please try again with different instructions.")
+            raise ValueError("AI did not generate any questions. Try simplifying your instructions.")
         
         created_count = 0
         for q in questions_list:
-            Question.objects.create(
-                subject=exam_paper.subject,
-                school=exam_paper.school,
-                created_by=exam_paper.uploaded_by,
-                question_type=str(q.get('question_type', 'MCQ')).upper(),
-                question_text=q.get('question_text', 'Sample Question'),
-                option_a=q.get('option_a', 'Option A'),
-                option_b=q.get('option_b', 'Option B'),
-                option_c=q.get('option_c', 'Option C'),
-                option_d=q.get('option_d', 'Option D'),
-                correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
-                model_answer=q.get('model_answer', ''),
-                marks=int(q.get('marks', 1)),
-                difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
-            )
-            created_count += 1
+            try:
+                Question.objects.create(
+                    subject=exam_paper.subject,
+                    school=exam_paper.school,
+                    created_by=exam_paper.uploaded_by,
+                    question_type=str(q.get('question_type', 'MCQ')).upper(),
+                    question_text=q.get('question_text', 'Sample Question'),
+                    option_a=str(q.get('option_a', ''))[:500],
+                    option_b=str(q.get('option_b', ''))[:500],
+                    option_c=str(q.get('option_c', ''))[:500],
+                    option_d=str(q.get('option_d', ''))[:500],
+                    correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
+                    model_answer=q.get('model_answer', ''),
+                    marks=int(q.get('marks', 1)),
+                    difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
+                )
+                created_count += 1
+            except Exception as item_err:
+                logger.warning(f"Failed to create single question: {item_err}")
+                continue
             
+        if created_count == 0:
+            raise ValueError("Failed to save any questions to the database. Check if the AI output matches the expected fields.")
+
         exam_paper.questions_generated = True
         exam_paper.generation_error = ''
         exam_paper.save()
-        logger.info(f"Saved {created_count} questions for {exam_paper.school}")
+        logger.info(f"Successfully saved {created_count} questions for paper {exam_paper_id}")
         
     except Exception as e:
-        # Re-fetch paper to avoid stale state if it was modified elsewhere
+        logger.error(f"Generation Error: {e}")
         try:
             ep = ExamPaper.objects.get(id=exam_paper_id)
             ep.generation_error = str(e)
             ep.save()
         except: pass
-        logger.error(f"Generation Error: {e}")
         raise e
 
 def generate_paper_from_multiple(paper_ids, instructions, subject, school, teacher, **kwargs):
@@ -228,36 +235,47 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
                     content.append({'mime_type': p_mime, 'data': p_data})
                     content.append(f"Above is context from paper: {paper.title}")
 
+        logger.info(f"Sending request to Gemini for multiple papers...")
         response = model.generate_content(content)
-        text = response.text.strip()
+        try:
+            text = response.text.strip()
+        except Exception as e:
+            logger.error(f"Gemini Response Error: {e}")
+            raise ValueError(f"AI generation failed: {str(e)}")
         
-        if '```json' in text:
-            text = text.split('```json')[1].split('```')[0].strip()
-        elif '```' in text:
-            text = text.split('```')[1].split('```')[0].strip()
-            
-        data = json.loads(text)
+        data = _extract_json(text)
+        if not data:
+            logger.error(f"JSON Parsing failed for multiple papers. Raw response: {text}")
+            raise ValueError("Failed to parse AI response.")
+
         questions_list = data.get('questions', [])
         
         created_count = 0
         for q in questions_list:
-            Question.objects.create(
-                subject=subject,
-                school=school,
-                created_by=teacher,
-                question_type=str(q.get('question_type', 'MCQ')).upper(),
-                question_text=q.get('question_text', 'Sample Question'),
-                option_a=q.get('option_a', 'Option A'),
-                option_b=q.get('option_b', 'Option B'),
-                option_c=q.get('option_c', 'Option C'),
-                option_d=q.get('option_d', 'Option D'),
-                correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
-                model_answer=q.get('model_answer', ''),
-                marks=int(q.get('marks', 1)),
-                difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
-            )
-            created_count += 1
+            try:
+                Question.objects.create(
+                    subject=subject,
+                    school=school,
+                    created_by=teacher,
+                    question_type=str(q.get('question_type', 'MCQ')).upper(),
+                    question_text=q.get('question_text', 'Sample Question'),
+                    option_a=str(q.get('option_a', ''))[:500],
+                    option_b=str(q.get('option_b', ''))[:500],
+                    option_c=str(q.get('option_c', ''))[:500],
+                    option_d=str(q.get('option_d', ''))[:500],
+                    correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
+                    model_answer=q.get('model_answer', ''),
+                    marks=int(q.get('marks', 1)),
+                    difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
+                )
+                created_count += 1
+            except Exception as item_err:
+                logger.warning(f"Failed to create single question (multiple papers): {item_err}")
+                continue
             
+        if created_count == 0:
+            raise ValueError("No questions could be saved from the AI response.")
+
         # Update status for all source papers
         papers.update(questions_generated=True, generation_error='')
         
@@ -294,34 +312,41 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
         Each question must have: question_type (MCQ/SHORT/LONG), question_text, marks, difficulty, option_a, option_b, option_c, option_d, correct_answer (A/B/C/D), model_answer."""
         
         response = model.generate_content(prompt)
-        text = response.text.strip()
-        
-        if '```json' in text:
-            text = text.split('```json')[1].split('```')[0].strip()
-        elif '```' in text:
-            text = text.split('```')[1].split('```')[0].strip()
+        try:
+            text = response.text.strip()
+        except Exception as e:
+            logger.error(f"Gemini Response Error (Instructions): {e}")
+            raise ValueError(f"AI generation failed: {str(e)}")
             
-        data = json.loads(text)
+        data = _extract_json(text)
+        if not data:
+            logger.error(f"JSON Parsing failed for instructions. Raw response: {text}")
+            raise ValueError("Failed to parse AI response.")
+
         questions_list = data.get('questions', [])
         
         created_count = 0
         for q in questions_list:
-            Question.objects.create(
-                subject=subject,
-                school=school,
-                created_by=teacher,
-                question_type=str(q.get('question_type', 'MCQ')).upper(),
-                question_text=q.get('question_text', 'Sample Question'),
-                option_a=q.get('option_a', 'Option A'),
-                option_b=q.get('option_b', 'Option B'),
-                option_c=q.get('option_c', 'Option C'),
-                option_d=q.get('option_d', 'Option D'),
-                correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
-                model_answer=q.get('model_answer', ''),
-                marks=int(q.get('marks', 1)),
-                difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
-            )
-            created_count += 1
+            try:
+                Question.objects.create(
+                    subject=subject,
+                    school=school,
+                    created_by=teacher,
+                    question_type=str(q.get('question_type', 'MCQ')).upper(),
+                    question_text=q.get('question_text', 'Sample Question'),
+                    option_a=str(q.get('option_a', ''))[:500],
+                    option_b=str(q.get('option_b', ''))[:500],
+                    option_c=str(q.get('option_c', ''))[:500],
+                    option_d=str(q.get('option_d', ''))[:500],
+                    correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
+                    model_answer=q.get('model_answer', ''),
+                    marks=int(q.get('marks', 1)),
+                    difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
+                )
+                created_count += 1
+            except Exception as item_err:
+                logger.warning(f"Failed to create single question (instructions): {item_err}")
+                continue
             
         return {'success': True, 'questions_count': created_count}
     except Exception as e:
