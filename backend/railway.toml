@@ -1,7 +1,0 @@
-[build]
-builder = "nixpacks"
-
-[deploy]
-preDeployCommand = "python manage.py migrate --no-input && python manage.py createsuperuser --noinput || true"
-startCommand = "gunicorn exam_platform.wsgi --log-file -"
-restartPolicyType = "on_failure"
