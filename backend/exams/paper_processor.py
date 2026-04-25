@@ -17,17 +17,8 @@ from .models import ExamPaper, Question
 
 logger = logging.getLogger(__name__)
 
-def get_gemini_model(api_key):
-    genai.configure(api_key=api_key)
-    models_to_try = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-latest']
-    for model_name in models_to_try:
-        try:
-            return genai.GenerativeModel(model_name)
-        except: continue
-    return genai.GenerativeModel('gemini-1.5-flash')
-
 def _retrieve_file_data(file_field):
-    """Silent, high-speed file retrieval. No database hits here."""
+    """Silent, high-speed file retrieval."""
     url = file_field.url
     mime, _ = mimetypes.guess_type(url)
     if not mime:
@@ -35,22 +26,18 @@ def _retrieve_file_data(file_field):
     
     session = requests.Session()
     session.headers.update({'User-Agent': 'Mozilla/5.0'})
-    
     keys = settings.CLOUDINARY_STORAGE
     exts = ["", ".png", ".pdf", ".jpg"]
 
-    # 1. Fast Public Check (using HEAD first)
     for ext in exts:
         try:
             test_url = f"{url}{ext}"
-            # Head request is instant - just checks if file exists
             if session.head(test_url, timeout=3, allow_redirects=True).status_code == 200:
                 resp = session.get(test_url, timeout=5)
                 if resp.status_code == 200:
                     return resp.content, mime, f"Public-{ext}"
         except: continue
 
-    # 2. Secure SDK Access
     if 'cloudinary' in url.lower() and keys.get('API_SECRET'):
         try:
             cloudinary.config(cloud_name=keys['CLOUD_NAME'], api_key=keys['API_KEY'], api_secret=keys['API_SECRET'], secure=True)
@@ -70,7 +57,7 @@ def _retrieve_file_data(file_field):
                     except: continue
         except: pass
 
-    return None, None, "File not found or access denied"
+    return None, None, "File not found"
 
 def _extract_json(text):
     text = text.strip()
@@ -87,7 +74,6 @@ def _extract_json(text):
 
 def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
     try:
-        # Step 0: Ensure clean DB connection
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         
@@ -97,19 +83,27 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         
         data, mime, debug_info = _retrieve_file_data(exam_paper.file)
         if not data:
-            raise ValueError(f"Could not read your paper. Please ensure the upload was successful and use a standard format (.jpg, .png, or .pdf). Details: {debug_info}")
+            raise ValueError(f"Could not read your paper. Please ensure the upload was successful. ({debug_info})")
 
         # Step 2: AI Generation
         exam_paper.generation_error = '[PROGRESS] AI is thinking (this takes 30-60s)...'
         exam_paper.save()
 
         api_key = settings.GEMINI_API_KEY
-        model = get_gemini_model(api_key)
+        genai.configure(api_key=api_key)
+        
+        # Priority model: 1.5-flash is extremely fast and reliable
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
         if instructions: prompt += f"\nSpecific Instructions: {instructions}"
-        prompt += '\nReturn ONLY a JSON object with a "questions" key containing the list of questions.'
+        prompt += '\nReturn ONLY a JSON object with a "questions" key containing: question_type, question_text, marks, difficulty, option_a, option_b, option_c, option_d, correct_answer (A/B/C/D), model_answer.'
         
-        response = model.generate_content([prompt, {'mime_type': mime, 'data': data}])
+        # Increased timeout to 10 minutes for slow server connections
+        response = model.generate_content(
+            [prompt, {'mime_type': mime, 'data': data}],
+            request_options={'timeout': 600}
+        )
         
         # Step 3: Save Questions
         exam_paper.generation_error = '[PROGRESS] Finalizing questions...'
@@ -117,7 +111,7 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
 
         data = _extract_json(response.text)
         if not data or not data.get('questions'):
-            raise ValueError("The AI could not read the content of this specific file. Please try re-uploading a clearer image or a PDF.")
+            raise ValueError("The AI could not read the content of this specific file. Try a clearer image.")
 
         created_count = 0
         with transaction.atomic():
@@ -158,7 +152,8 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
     try:
         db.connections.close_all()
         api_key = settings.GEMINI_API_KEY
-        model = get_gemini_model(api_key)
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
         num_mcq, num_short, num_long = kwargs.get('num_mcq', 20), kwargs.get('num_short', 5), kwargs.get('num_long', 4)
         
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {subject.name}."
@@ -171,7 +166,7 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
             p_data, p_mime, _ = _retrieve_file_data(paper.file)
             if p_data: content.append({'mime_type': p_mime, 'data': p_data})
 
-        response = model.generate_content(content)
+        response = model.generate_content(content, request_options={'timeout': 600})
         data = _extract_json(response.text)
         
         created_count = 0
@@ -206,7 +201,8 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
     try:
         db.connections.close_all()
         api_key = settings.GEMINI_API_KEY
-        model = get_gemini_model(api_key)
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
         num_mcq, num_short, num_long = marks_distribution.get('num_mcq', 20), marks_distribution.get('num_short', 5), marks_distribution.get('num_long', 4)
         
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {subject.name}."
@@ -214,7 +210,7 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
         if topics: prompt += f"\nFocus: {topics}"
         prompt += '\nReturn ONLY JSON.'
         
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, request_options={'timeout': 600})
         data = _extract_json(response.text)
         
         created_count = 0
