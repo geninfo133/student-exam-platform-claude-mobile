@@ -27,24 +27,28 @@ def get_gemini_model(api_key):
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def _retrieve_file_data(file_field):
-    """Safely retrieve file content. Returns (data, mime_type, debug_info)."""
+    """Safely and FASTly retrieve file content."""
     url = file_field.url
     mime, _ = mimetypes.guess_type(url)
     if not mime:
         mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
     
-    debug_log = []
+    # 1. Try Direct HTTP (Fastest if public)
+    try:
+        resp = requests.get(url, timeout=5, allow_redirects=True)
+        if resp.status_code == 200:
+            return resp.content, mime, "HTTP"
+    except: pass
 
-    # 1. Native open
+    # 2. Try Native Open (Local/Cached)
     try:
         file_field.open('rb')
         data = file_field.read()
         file_field.close()
-        if data: return data, mime, "Success (Native)"
-    except Exception as e:
-        debug_log.append(f"Native: {str(e)}")
+        if data: return data, mime, "Native"
+    except: pass
 
-    # 2. Optimized Cloudinary SDK
+    # 3. Targeted Cloudinary Fetch
     if 'cloudinary' in url.lower():
         try:
             keys = settings.CLOUDINARY_STORAGE
@@ -54,35 +58,40 @@ def _retrieve_file_data(file_field):
                 api_secret=keys['API_SECRET'],
                 secure=True
             )
-            public_id = url.split('/upload/')[-1]
-            if '/private/' in url: public_id = url.split('/private/')[-1]
-            if '/authenticated/' in url: public_id = url.split('/authenticated/')[-1]
-            public_id = re.sub(r'^v\d+/', '', public_id).rsplit('.', 1)[0]
             
-            for r_type in ['image', 'raw']:
-                for d_type in ['upload', 'private', 'authenticated']:
+            # Parse URL for resource_type and type
+            res_type = 'image' if 'image' in url.lower() else 'raw'
+            del_type = 'upload'
+            if '/private/' in url: del_type = 'private'
+            elif '/authenticated/' in url: del_type = 'authenticated'
+            
+            # Extract Public ID correctly
+            pattern = f'/{del_type}/(?:v\d+/)?(.+?)(?:\.[a-z0-9]+)?$'
+            match = re.search(pattern, url)
+            public_id = match.group(1) if match else url.split('/')[-1].rsplit('.', 1)[0]
+            
+            # Try specific combination
+            try:
+                signed_url, _ = cloudinary.utils.cloudinary_url(
+                    public_id, sign_url=True, secure=True,
+                    resource_type=res_type, type=del_type
+                )
+                resp = requests.get(signed_url, timeout=5)
+                if resp.status_code == 200:
+                    return resp.content, mime, f"SDK-{res_type}-{del_type}"
+            except: pass
+            
+            # Final broad fallback
+            for r in ['image', 'raw']:
+                for d in ['upload', 'private']:
                     try:
-                        signed_url, _ = cloudinary.utils.cloudinary_url(
-                            public_id, sign_url=True, secure=True,
-                            resource_type=r_type, type=d_type
-                        )
-                        resp = requests.get(signed_url, timeout=10)
-                        if resp.status_code == 200:
-                            return resp.content, mime, f"Success (SDK {r_type}/{d_type})"
+                        s_url, _ = cloudinary.utils.cloudinary_url(public_id, sign_url=True, secure=True, resource_type=r, type=d)
+                        resp = requests.get(s_url, timeout=3)
+                        if resp.status_code == 200: return resp.content, mime, "SDK-Fallback"
                     except: continue
-        except Exception as e:
-            debug_log.append(f"Cloudinary Logic: {str(e)}")
+        except: pass
 
-    # 3. Direct HTTP
-    try:
-        resp = requests.get(url, timeout=10, allow_redirects=True)
-        if resp.status_code == 200:
-            return resp.content, mime, "Success (HTTP)"
-        debug_log.append(f"HTTP: {resp.status_code}")
-    except Exception as e:
-        debug_log.append(f"HTTP: {str(e)}")
-
-    return None, None, " | ".join(debug_log)
+    return None, None, "Failed all methods"
 
 def _extract_json(text):
     text = text.strip()
@@ -106,8 +115,6 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         exam_paper.save()
 
         api_key = settings.GEMINI_API_KEY
-        if not api_key: raise ValueError("Gemini API Key missing.")
-
         data, mime, debug_info = _retrieve_file_data(exam_paper.file)
         if not data: raise ValueError(f"Retrieval failed: {debug_info}")
 
@@ -149,14 +156,10 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
                 except: continue
         
         exam_paper.questions_generated = (created_count > 0)
-        if created_count > 0:
-            exam_paper.generation_error = '[SUCCESS] Done! Questions are saved to your Question Bank.'
-        else:
-            exam_paper.generation_error = 'Failed to save questions.'
+        exam_paper.generation_error = '[SUCCESS] Done! Questions are saved to your Question Bank.' if created_count > 0 else 'Failed to save questions.'
         exam_paper.save()
         
     except Exception as e:
-        logger.error(f"Generation Error: {e}")
         try:
             db.connections.close_all()
             ep = ExamPaper.objects.get(id=exam_paper_id)
@@ -209,7 +212,7 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
                     except: continue
         
         if created_count > 0:
-            papers.update(questions_generated=True, generation_error='')
+            papers.update(questions_generated=True, generation_error='[SUCCESS] Generated from multiple sources.')
             return {'success': True}
         return {'success': False, 'error': 'No questions saved'}
     except Exception as e:
