@@ -23,8 +23,6 @@ def get_gemini_model(api_key):
 def _retrieve_file_data(file_field):
     """Safely retrieve file content from local storage or Cloudinary. Returns (data, mime_type)."""
     url = file_field.url
-    
-    # 1. MIME type detection
     mime, _ = mimetypes.guess_type(url)
     if not mime:
         mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
@@ -39,72 +37,98 @@ def _retrieve_file_data(file_field):
     except Exception as e:
         logger.warning(f"Native open failed: {e}")
 
-    # TRY 2: Authenticated Cloudinary API Fetch
-    if 'cloudinary' in url.lower():
-        try:
-            import cloudinary
-            import cloudinary.utils
-            import cloudinary.api
-            import re
-            
-            cloudinary.config(
-                cloud_name=settings.CLOUDINARY_STORAGE['CLOUD_NAME'],
-                api_key=settings.CLOUDINARY_STORAGE['API_KEY'],
-                api_secret=settings.CLOUDINARY_STORAGE['API_SECRET']
-            )
-            
-            # Extract Public ID from URL
-            public_id = url
-            if '/upload/' in url:
-                path_after_upload = url.split('/upload/')[-1]
-                path_no_version = re.sub(r'^v\d+/', '', path_after_upload)
-                public_id = path_no_version.rsplit('.', 1)[0]
-            
-            # Use the Admin API to get the correct resource type and secure URL
-            try:
-                # We try 'image' then 'raw' as Cloudinary treats them differently
-                resource = None
-                for r_type in ['image', 'raw']:
-                    try:
-                        resource = cloudinary.api.resource(public_id, resource_type=r_type)
-                        break
-                    except: continue
-                
-                if resource:
-                    # Generate a signed URL using the verified public_id and resource_type
-                    signed_url = cloudinary.utils.cloudinary_url(
-                        resource['public_id'], 
-                        sign_url=True, 
-                        secure=True,
-                        version=resource.get('version'),
-                        resource_type=resource.get('resource_type', 'image')
-                    )[0]
-                    
-                    response = requests.get(signed_url, timeout=30)
-                    if response.status_code == 200:
-                        logger.info(f"Fetched signed resource: {public_id}")
-                        return response.content, mime
-            except Exception as api_err:
-                logger.warning(f"Cloudinary Admin API check failed: {api_err}")
-                
-        except Exception as e:
-            logger.warning(f"Cloudinary Logic failed: {e}")
-
-    # TRY 3: Fallback HTTP
+    # TRY 2: Basic Auth Download (Standard for Cloudinary)
     if url.startswith('http'):
         try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(url, timeout=30, allow_redirects=True, headers=headers)
+            from requests.auth import HTTPBasicAuth
+            auth = HTTPBasicAuth(
+                settings.CLOUDINARY_STORAGE['API_KEY'], 
+                settings.CLOUDINARY_STORAGE['API_SECRET']
+            )
+            response = requests.get(url, auth=auth, timeout=30, allow_redirects=True)
+            if response.status_code == 200:
+                logger.info(f"Successfully fetched authenticated resource: {url}")
+                return response.content, mime
+            
+            # Try without auth as a second attempt
+            response = requests.get(url, timeout=30)
             if response.status_code == 200:
                 return response.content, mime
-            elif response.status_code == 401:
-                raise ValueError(f"Cloudinary Access Denied (401). Please ensure your Cloudinary API Secret is correct in the environment variables.")
-            else:
-                raise ValueError(f"Storage Error ({response.status_code})")
-        except requests.exceptions.RequestException as req_err:
-            raise ValueError(f"Connection failed: {str(req_err)}")
+                
+        except Exception as e:
+            logger.warning(f"Authenticated fetch failed: {e}")
 
     return None, None
+
+def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
+    try:
+        exam_paper = ExamPaper.objects.get(id=exam_paper_id)
+        api_key = settings.GEMINI_API_KEY
+        if not api_key or api_key.startswith('sk-ant-'):
+            raise ValueError("Invalid or missing Gemini API Key.")
+
+        model = get_gemini_model(api_key)
+        
+        # Build prompt
+        prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
+        if instructions:
+            prompt += f"\nSpecific Instructions: {instructions}"
+            
+        prompt += """\nReturn ONLY a JSON object with a "questions" key. 
+        Each question must have: question_type (MCQ/SHORT/LONG), question_text, marks, difficulty, option_a, option_b, option_c, option_d, correct_answer (A/B/C/D), model_answer."""
+        
+        content = [prompt]
+        
+        if exam_paper.extracted_text:
+            content.append(f"Context: {exam_paper.extracted_text[:15000]}")
+        elif exam_paper.file:
+            pdf_data, mime = _retrieve_file_data(exam_paper.file)
+            if pdf_data:
+                content.append({'mime_type': mime, 'data': pdf_data})
+            else:
+                raise ValueError("Could not retrieve document data from Cloudinary (401/404). Check your Cloudinary API credentials.")
+        else:
+            raise ValueError("No text or file available for processing")
+
+        logger.info(f"Sending request to Gemini for paper {exam_paper_id}...")
+        response = model.generate_content(content)
+        
+        text = response.text.strip()
+        data = _extract_json(text)
+        
+        if not data or not data.get('questions'):
+            raise ValueError("AI returned no questions.")
+
+        created_count = 0
+        for q in data['questions']:
+            try:
+                Question.objects.create(
+                    subject=exam_paper.subject,
+                    school=exam_paper.school,
+                    created_by=exam_paper.uploaded_by,
+                    question_type=str(q.get('question_type', 'MCQ')).upper(),
+                    question_text=q.get('question_text', 'Sample Question'),
+                    option_a=str(q.get('option_a', ''))[:500],
+                    option_b=str(q.get('option_b', ''))[:500],
+                    option_c=str(q.get('option_c', ''))[:500],
+                    option_d=str(q.get('option_d', ''))[:500],
+                    correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
+                    model_answer=q.get('model_answer', ''),
+                    marks=int(q.get('marks', 1)),
+                    difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
+                )
+                created_count += 1
+            except: continue
+            
+        exam_paper.questions_generated = True
+        exam_paper.generation_error = ''
+        exam_paper.save()
+        
+    except Exception as e:
+        logger.error(f"Generation Error: {e}")
+        exam_paper.generation_error = str(e)
+        exam_paper.save()
+        raise e
 
 def _extract_json(text):
     """Robustly extract JSON from AI response text."""
