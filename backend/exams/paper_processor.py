@@ -5,6 +5,7 @@ import json
 import logging
 import mimetypes
 import requests
+import re
 import google.generativeai as genai
 from django.conf import settings
 from .models import ExamPaper, Question
@@ -33,30 +34,66 @@ def _retrieve_file_data(file_field):
         data = file_field.read()
         file_field.close()
         if data:
-            logger.info(f"Successfully opened file locally: {url}")
             return data, mime
     except Exception as e:
         logger.warning(f"Native open failed: {e}")
 
-    # TRY 2: Simple HTTP request (Cloudinary public URLs don't need auth)
+    # TRY 2: Multi-Type Authenticated Cloudinary Fetch
+    if 'cloudinary' in url.lower():
+        try:
+            import cloudinary
+            import cloudinary.utils
+            
+            # Diagnostic check for keys
+            keys = settings.CLOUDINARY_STORAGE
+            if not all([keys.get('CLOUD_NAME'), keys.get('API_KEY'), keys.get('API_SECRET')]):
+                logger.error("Missing Cloudinary credentials in settings")
+            else:
+                cloudinary.config(
+                    cloud_name=keys['CLOUD_NAME'],
+                    api_key=keys['API_KEY'],
+                    api_secret=keys['API_SECRET']
+                )
+                
+                # Extract Public ID correctly
+                # Format: .../upload/v1234567/path/to/public_id.ext
+                public_id = url
+                if '/upload/' in url:
+                    public_id = url.split('/upload/')[-1].split('/', 1)[-1].rsplit('.', 1)[0]
+                elif '/private/' in url:
+                    public_id = url.split('/private/')[-1].split('/', 1)[-1].rsplit('.', 1)[0]
+                elif '/authenticated/' in url:
+                    public_id = url.split('/authenticated/')[-1].split('/', 1)[-1].rsplit('.', 1)[0]
+                
+                # Search across all possible resource types and delivery types
+                for r_type in ['image', 'raw']:
+                    for d_type in ['upload', 'private', 'authenticated']:
+                        try:
+                            # Generate a signed URL for this combination
+                            signed_url, _ = cloudinary.utils.cloudinary_url(
+                                public_id,
+                                sign_url=True,
+                                secure=True,
+                                resource_type=r_type,
+                                type=d_type
+                            )
+                            
+                            resp = requests.get(signed_url, timeout=20)
+                            if resp.status_code == 200:
+                                logger.info(f"Successfully fetched {public_id} as {r_type}/{d_type}")
+                                return resp.content, mime
+                        except: continue
+        except Exception as e:
+            logger.warning(f"Cloudinary Logic failed: {e}")
+
+    # TRY 3: Simple HTTP request (Final Fallback)
     if url.startswith('http'):
         try:
             response = requests.get(url, timeout=30, allow_redirects=True)
             if response.status_code == 200:
-                logger.info(f"Successfully downloaded file from {url}")
                 return response.content, mime
-            elif response.status_code == 401:
-                logger.error(f"HTTP 401: File access denied at {url}. Check Cloudinary permissions.")
-                raise ValueError("Cloudinary file access denied. Ensure file is public or re-upload.")
-            else:
-                logger.error(f"HTTP {response.status_code} fetching {url}")
-                raise ValueError(f"Could not fetch file (HTTP {response.status_code})")
-        except requests.exceptions.Timeout:
-            logger.error(f"Request timeout while fetching {url}")
-            raise ValueError("Request timeout. Check internet connection.")
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Network error: {e}")
-            raise ValueError(f"Network error: {str(e)}")
+        except Exception as e:
+            logger.error(f"HTTP fallback failed: {e}")
 
     return None, None
 
@@ -106,7 +143,7 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
             if pdf_data:
                 content.append({'mime_type': mime, 'data': pdf_data})
             else:
-                raise ValueError("Cloudinary access denied. Check API credentials or file permissions.")
+                raise ValueError("Cloudinary access denied. Ensure your API Secret is correct and the file is accessible.")
         else:
             raise ValueError("No text or file available for processing")
 
@@ -147,7 +184,9 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
                     difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
                 )
                 created_count += 1
-            except: continue
+            except Exception as item_err:
+                logger.warning(f"Failed to create single question: {item_err}")
+                continue
             
         if created_count == 0:
             raise ValueError("No valid questions saved to database.")
@@ -231,7 +270,9 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
                     difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
                 )
                 created_count += 1
-            except: continue
+            except Exception as item_err:
+                logger.warning(f"Failed to create single question (multiple papers): {item_err}")
+                continue
             
         if created_count == 0:
             raise ValueError("No questions could be saved from the AI response.")
@@ -301,7 +342,9 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
                     difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
                 )
                 created_count += 1
-            except: continue
+            except Exception as item_err:
+                logger.warning(f"Failed to create single question (instructions): {item_err}")
+                continue
             
         return {'success': True, 'questions_count': created_count}
     except Exception as e:
