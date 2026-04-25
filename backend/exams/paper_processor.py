@@ -22,80 +22,73 @@ def get_gemini_model(api_key):
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def _retrieve_file_data(file_field):
-    """Safely retrieve file content from local storage or Cloudinary. Returns (data, mime_type)."""
+    """Safely retrieve file content. Returns (data, mime_type, debug_info)."""
     url = file_field.url
     mime, _ = mimetypes.guess_type(url)
     if not mime:
         mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
-        
-    # TRY 1: Native Django file open (for local storage)
+    
+    debug_log = []
+
+    # TRY 1: Native Django file open
     try:
         file_field.open('rb')
         data = file_field.read()
         file_field.close()
         if data:
-            return data, mime
+            return data, mime, "Success (Native)"
     except Exception as e:
-        logger.warning(f"Native open failed: {e}")
+        debug_log.append(f"Native: {str(e)}")
 
-    # TRY 2: Multi-Type Authenticated Cloudinary Fetch
+    # TRY 2: Authenticated Cloudinary SDK Fetch
     if 'cloudinary' in url.lower():
         try:
             import cloudinary
             import cloudinary.utils
+            import cloudinary.api
             
-            # Diagnostic check for keys
             keys = settings.CLOUDINARY_STORAGE
-            if not all([keys.get('CLOUD_NAME'), keys.get('API_KEY'), keys.get('API_SECRET')]):
-                logger.error("Missing Cloudinary credentials in settings")
+            if not keys.get('API_SECRET'):
+                debug_log.append("Cloudinary: API_SECRET is empty in settings")
             else:
                 cloudinary.config(
                     cloud_name=keys['CLOUD_NAME'],
                     api_key=keys['API_KEY'],
-                    api_secret=keys['API_SECRET']
+                    api_secret=keys['API_SECRET'],
+                    secure=True
                 )
                 
-                # Extract Public ID correctly
-                # Format: .../upload/v1234567/path/to/public_id.ext
-                public_id = url
-                if '/upload/' in url:
-                    public_id = url.split('/upload/')[-1].split('/', 1)[-1].rsplit('.', 1)[0]
-                elif '/private/' in url:
-                    public_id = url.split('/private/')[-1].split('/', 1)[-1].rsplit('.', 1)[0]
-                elif '/authenticated/' in url:
-                    public_id = url.split('/authenticated/')[-1].split('/', 1)[-1].rsplit('.', 1)[0]
+                # Robust Public ID Extraction
+                # Supports: .../upload/v1234/folder/id.jpg OR .../upload/id
+                match = re.search(r'/(?:upload|private|authenticated)/(?:v\d+/)?(.+?)(?:\.[a-z0-9]+)?$', url)
+                public_id = match.group(1) if match else url.split('/')[-1].rsplit('.', 1)[0]
                 
-                # Search across all possible resource types and delivery types
                 for r_type in ['image', 'raw']:
                     for d_type in ['upload', 'private', 'authenticated']:
                         try:
-                            # Generate a signed URL for this combination
                             signed_url, _ = cloudinary.utils.cloudinary_url(
-                                public_id,
-                                sign_url=True,
-                                secure=True,
-                                resource_type=r_type,
-                                type=d_type
+                                public_id, sign_url=True, secure=True,
+                                resource_type=r_type, type=d_type
                             )
-                            
-                            resp = requests.get(signed_url, timeout=20)
+                            resp = requests.get(signed_url, timeout=15)
                             if resp.status_code == 200:
-                                logger.info(f"Successfully fetched {public_id} as {r_type}/{d_type}")
-                                return resp.content, mime
+                                return resp.content, mime, f"Success (SDK {r_type}/{d_type})"
                         except: continue
+                debug_log.append("Cloudinary: All SDK combinations failed (401/404)")
         except Exception as e:
-            logger.warning(f"Cloudinary Logic failed: {e}")
+            debug_log.append(f"Cloudinary Logic: {str(e)}")
 
-    # TRY 3: Simple HTTP request (Final Fallback)
+    # TRY 3: Standard HTTP Fallback
     if url.startswith('http'):
         try:
-            response = requests.get(url, timeout=30, allow_redirects=True)
-            if response.status_code == 200:
-                return response.content, mime
+            resp = requests.get(url, timeout=15, allow_redirects=True)
+            if resp.status_code == 200:
+                return resp.content, mime, "Success (HTTP)"
+            debug_log.append(f"HTTP: Error {resp.status_code}")
         except Exception as e:
-            logger.error(f"HTTP fallback failed: {e}")
+            debug_log.append(f"HTTP: {str(e)}")
 
-    return None, None
+    return None, None, " | ".join(debug_log)
 
 def _extract_json(text):
     """Robustly extract JSON from AI response text."""
@@ -108,7 +101,6 @@ def _extract_json(text):
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Final fallback: find the first { and last }
         start = text.find('{')
         end = text.rfind('}')
         if start != -1 and end != -1:
@@ -122,11 +114,10 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
         api_key = settings.GEMINI_API_KEY
         if not api_key or api_key.startswith('sk-ant-'):
-            raise ValueError("Invalid or missing Gemini API Key (starts with AIza).")
+            raise ValueError("Invalid Gemini API Key. Please provide a key starting with 'AIza'.")
 
         model = get_gemini_model(api_key)
         
-        # Build prompt
         prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
         if instructions:
             prompt += f"\nSpecific Instructions: {instructions}"
@@ -139,34 +130,28 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         if exam_paper.extracted_text:
             content.append(f"Context: {exam_paper.extracted_text[:15000]}")
         elif exam_paper.file:
-            pdf_data, mime = _retrieve_file_data(exam_paper.file)
-            if pdf_data:
-                content.append({'mime_type': mime, 'data': pdf_data})
+            data, mime, debug_info = _retrieve_file_data(exam_paper.file)
+            if data:
+                content.append({'mime_type': mime, 'data': data})
             else:
-                raise ValueError("Cloudinary access denied. Ensure your API Secret is correct and the file is accessible.")
+                raise ValueError(f"File Retrieval Failed. Details: {debug_info}")
         else:
-            raise ValueError("No text or file available for processing")
+            raise ValueError("No content to process.")
 
-        logger.info(f"Sending request to Gemini for paper {exam_paper_id}...")
+        logger.info(f"Requesting Gemini for paper {exam_paper_id}...")
         response = model.generate_content(content)
         
         try:
             text = response.text.strip()
         except Exception as e:
-            logger.error(f"Gemini Response Error: {e}")
             raise ValueError(f"AI generation error: {str(e)}")
         
         data = _extract_json(text)
-        if not data:
-            logger.error(f"JSON Parsing failed. Raw response: {text}")
-            raise ValueError("Failed to parse AI response. Try again.")
-
-        questions_list = data.get('questions', [])
-        if not questions_list:
+        if not data or not data.get('questions'):
             raise ValueError("AI returned no questions. Try simpler instructions.")
-        
+
         created_count = 0
-        for q in questions_list:
+        for q in data['questions']:
             try:
                 Question.objects.create(
                     subject=exam_paper.subject,
@@ -184,17 +169,14 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
                     difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
                 )
                 created_count += 1
-            except Exception as item_err:
-                logger.warning(f"Failed to create single question: {item_err}")
-                continue
+            except: continue
             
         if created_count == 0:
-            raise ValueError("No valid questions saved to database.")
+            raise ValueError("Failed to save questions to database.")
 
         exam_paper.questions_generated = True
         exam_paper.generation_error = ''
         exam_paper.save()
-        logger.info(f"Successfully saved {created_count} questions for paper {exam_paper_id}")
         
     except Exception as e:
         logger.error(f"Generation Error: {e}")
@@ -231,22 +213,19 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
             if paper.extracted_text:
                 content.append(f"Context from {paper.title}: {paper.extracted_text[:5000]}")
             elif paper.file:
-                p_data, p_mime = _retrieve_file_data(paper.file)
+                p_data, p_mime, _ = _retrieve_file_data(paper.file)
                 if p_data:
                     content.append({'mime_type': p_mime, 'data': p_data})
                     content.append(f"Above is context from paper: {paper.title}")
 
-        logger.info(f"Sending request to Gemini for multiple papers...")
         response = model.generate_content(content)
         try:
             text = response.text.strip()
         except Exception as e:
-            logger.error(f"Gemini Response Error: {e}")
             raise ValueError(f"AI generation failed: {str(e)}")
         
         data = _extract_json(text)
         if not data:
-            logger.error(f"JSON Parsing failed for multiple papers. Raw response: {text}")
             raise ValueError("Failed to parse AI response.")
 
         questions_list = data.get('questions', [])
@@ -270,16 +249,12 @@ def generate_paper_from_multiple(paper_ids, instructions, subject, school, teach
                     difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
                 )
                 created_count += 1
-            except Exception as item_err:
-                logger.warning(f"Failed to create single question (multiple papers): {item_err}")
-                continue
+            except: continue
             
         if created_count == 0:
-            raise ValueError("No questions could be saved from the AI response.")
+            raise ValueError("No questions could be saved.")
 
-        # Update status for all source papers
         papers.update(questions_generated=True, generation_error='')
-        
         return {'success': True, 'questions_count': created_count}
     except Exception as e:
         logger.error(f"Combined Generation Error: {e}")
@@ -313,12 +288,10 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
         try:
             text = response.text.strip()
         except Exception as e:
-            logger.error(f"Gemini Response Error (Instructions): {e}")
             raise ValueError(f"AI generation failed: {str(e)}")
             
         data = _extract_json(text)
         if not data:
-            logger.error(f"JSON Parsing failed for instructions. Raw response: {text}")
             raise ValueError("Failed to parse AI response.")
 
         questions_list = data.get('questions', [])
@@ -342,9 +315,7 @@ def generate_questions_from_instructions(subject, chapters, topics, marks_distri
                     difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
                 )
                 created_count += 1
-            except Exception as item_err:
-                logger.warning(f"Failed to create single question (instructions): {item_err}")
-                continue
+            except: continue
             
         return {'success': True, 'questions_count': created_count}
     except Exception as e:
