@@ -16,21 +16,16 @@ def get_gemini_model(api_key):
     genai.configure(api_key=api_key)
     # Try models in order of stability and availability
     models_to_try = [
+        'gemini-2.0-flash',
         'gemini-1.5-flash',
         'gemini-1.5-flash-latest',
-        'gemini-2.0-flash',
-        'gemini-1.5-flash-001',
         'gemini-pro'
     ]
     for model_name in models_to_try:
         try:
             model = genai.GenerativeModel(model_name)
-            # Test model with a very small call to ensure it exists
             return model
-        except Exception as e:
-            logger.warning(f"Model {model_name} not available: {e}")
-            continue
-    # Ultimate fallback
+        except: continue
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def _retrieve_file_data(file_field):
@@ -124,6 +119,11 @@ def _extract_json(text):
 def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
     try:
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
+        
+        # Live Progress Update
+        exam_paper.generation_error = 'Step 1/3: Reading document...'
+        exam_paper.save()
+
         api_key = settings.GEMINI_API_KEY
         if not api_key or api_key.startswith('sk-ant-'):
             raise ValueError("Invalid Gemini API Key. Please provide a key starting with 'AIza'.")
@@ -150,6 +150,10 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         else:
             raise ValueError("No content to process.")
 
+        # Live Progress Update
+        exam_paper.generation_error = 'Step 2/3: AI is processing (30-60s)...'
+        exam_paper.save()
+
         logger.info(f"Requesting Gemini for paper {exam_paper_id}...")
         response = model.generate_content(content)
         
@@ -158,6 +162,10 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         except Exception as e:
             raise ValueError(f"AI generation error: {str(e)}")
         
+        # Live Progress Update
+        exam_paper.generation_error = 'Step 3/3: Saving generated questions...'
+        exam_paper.save()
+
         data = _extract_json(text)
         if not data or not data.get('questions'):
             raise ValueError("AI returned no questions. Try simpler instructions.")

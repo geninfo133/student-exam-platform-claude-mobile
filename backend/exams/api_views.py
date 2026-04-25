@@ -543,15 +543,22 @@ class GenerateQuestionsFromPaperView(APIView):
         if paper.questions_generated:
             return Response({'error': 'Questions already generated for this paper'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Clear any previous error before starting a new attempt
-        paper.generation_error = ''
+        # Clear any previous error and set a processing message
+        paper.generation_error = 'Initializing AI generation...'
         paper.save()
 
         # Run generation in a background thread to avoid HTTP timeouts
         from .paper_processor import generate_questions_from_paper
         import threading
-        thread = threading.Thread(target=generate_questions_from_paper, args=(paper.id,))
-        thread.daemon = True
+        from django import db
+
+        def run_threaded_generation(paper_id):
+            try:
+                generate_questions_from_paper(paper_id)
+            finally:
+                db.connection.close()
+
+        thread = threading.Thread(target=run_threaded_generation, args=(paper.id,))
         thread.start()
 
         return Response({
@@ -581,8 +588,16 @@ class CreatePaperFromPapersView(APIView):
 
         from .paper_processor import generate_paper_from_multiple
         import threading
+        from django import db
+
+        def run_threaded_multi_generation(p_ids, instr, sub, sch, usr, **kwargs):
+            try:
+                generate_paper_from_multiple(p_ids, instr, sub, sch, usr, **kwargs)
+            finally:
+                db.connection.close()
+
         thread = threading.Thread(
-            target=generate_paper_from_multiple,
+            target=run_threaded_multi_generation,
             args=(serializer.validated_data['paper_ids'], serializer.validated_data['instructions'], subject, school, user),
             kwargs={
                 'total_marks': serializer.validated_data.get('total_marks', 50),
@@ -591,7 +606,6 @@ class CreatePaperFromPapersView(APIView):
                 'num_long': serializer.validated_data.get('num_long', 4),
             }
         )
-        thread.daemon = True
         thread.start()
 
         return Response({
@@ -644,11 +658,18 @@ class GenerateFromInstructionsView(APIView):
         # Run generation in a background thread to avoid HTTP timeouts
         from .paper_processor import generate_questions_from_instructions
         import threading
+        from django import db
+
+        def run_threaded_instruction_generation(sub, chaps, tops, marks_dist, total, sch, usr):
+            try:
+                generate_questions_from_instructions(sub, chaps, tops, marks_dist, total, sch, usr)
+            finally:
+                db.connection.close()
+
         thread = threading.Thread(
-            target=generate_questions_from_instructions,
+            target=run_threaded_instruction_generation,
             args=(subject, chapters, topics, marks_distribution, total_marks, school, user)
         )
-        thread.daemon = True
         thread.start()
 
         return Response({
