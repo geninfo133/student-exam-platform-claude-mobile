@@ -30,33 +30,62 @@ def _retrieve_file_data(file_field):
     # TRY 1: Native Django file open
     try:
         file_field.open('rb')
-        pdf_data = file_field.read()
+        data = file_field.read()
         file_field.close()
-        if pdf_data:
-            return pdf_data, mime
+        if data:
+            return data, mime
     except Exception as e:
         logger.warning(f"Native open failed: {e}")
 
-    # TRY 2: Basic Auth Download (Standard for Cloudinary)
+    # TRY 2: Cloudinary API Fetch (High Privilege)
+    if 'cloudinary' in url.lower():
+        try:
+            import cloudinary
+            import cloudinary.api
+            import re
+            
+            cloudinary.config(
+                cloud_name=settings.CLOUDINARY_STORAGE['CLOUD_NAME'],
+                api_key=settings.CLOUDINARY_STORAGE['API_KEY'],
+                api_secret=settings.CLOUDINARY_STORAGE['API_SECRET']
+            )
+            
+            # Extract Public ID correctly
+            public_id = url
+            if '/upload/' in url:
+                path_after_upload = url.split('/upload/')[-1]
+                path_no_version = re.sub(r'^v\d+/', '', path_after_upload)
+                public_id = path_no_version.rsplit('.', 1)[0]
+            
+            # Use the API to get the secure content
+            # Cloudinary 'image' and 'raw' (PDF) resources are in different buckets
+            for r_type in ['image', 'raw']:
+                try:
+                    # Get resource info
+                    res_info = cloudinary.api.resource(public_id, resource_type=r_type)
+                    if res_info.get('secure_url'):
+                        # Fetch the file using Basic Auth on the secure URL
+                        from requests.auth import HTTPBasicAuth
+                        auth = HTTPBasicAuth(
+                            settings.CLOUDINARY_STORAGE['API_KEY'], 
+                            settings.CLOUDINARY_STORAGE['API_SECRET']
+                        )
+                        resp = requests.get(res_info['secure_url'], auth=auth, timeout=30)
+                        if resp.status_code == 200:
+                            logger.info(f"Fetched {public_id} via {r_type} API")
+                            return resp.content, mime
+                except: continue
+                
+        except Exception as e:
+            logger.warning(f"Cloudinary API retrieval failed: {e}")
+
+    # TRY 3: Simple HTTP request (Final Fallback)
     if url.startswith('http'):
         try:
-            from requests.auth import HTTPBasicAuth
-            auth = HTTPBasicAuth(
-                settings.CLOUDINARY_STORAGE['API_KEY'], 
-                settings.CLOUDINARY_STORAGE['API_SECRET']
-            )
-            response = requests.get(url, auth=auth, timeout=30, allow_redirects=True)
-            if response.status_code == 200:
-                logger.info(f"Successfully fetched authenticated resource: {url}")
-                return response.content, mime
-            
-            # Try without auth as a second attempt
             response = requests.get(url, timeout=30)
             if response.status_code == 200:
                 return response.content, mime
-                
-        except Exception as e:
-            logger.warning(f"Authenticated fetch failed: {e}")
+        except: pass
 
     return None, None
 
