@@ -556,7 +556,7 @@ class GenerateQuestionsFromPaperView(APIView):
             try:
                 generate_questions_from_paper(paper_id)
             finally:
-                db.connection.close()
+                db.connections.close_all()
 
         thread = threading.Thread(target=run_threaded_generation, args=(paper.id,))
         thread.start()
@@ -594,7 +594,7 @@ class CreatePaperFromPapersView(APIView):
             try:
                 generate_paper_from_multiple(p_ids, instr, sub, sch, usr, **kwargs)
             finally:
-                db.connection.close()
+                db.connections.close_all()
 
         thread = threading.Thread(
             target=run_threaded_multi_generation,
@@ -664,7 +664,7 @@ class GenerateFromInstructionsView(APIView):
             try:
                 generate_questions_from_instructions(sub, chaps, tops, marks_dist, total, sch, usr)
             finally:
-                db.connection.close()
+                db.connections.close_all()
 
         thread = threading.Thread(
             target=run_threaded_instruction_generation,
