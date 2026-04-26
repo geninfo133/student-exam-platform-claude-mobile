@@ -63,28 +63,43 @@ def _extract_json(text):
             except: pass
     return None
 
+def _save_error(exam_paper_id, message):
+    """Reliably save an error message to the exam paper, creating a fresh DB connection."""
+    try:
+        db.connections.close_all()
+        ep = ExamPaper.objects.get(id=exam_paper_id)
+        ep.generation_error = message
+        ep.save()
+        print(f"DEBUG: [GEN] Error saved: {message}")
+    except Exception as save_err:
+        print(f"DEBUG: [GEN] Could not save error to DB: {save_err}")
+
+
 def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, num_short=2, num_long=2):
     try:
         print(f"DEBUG: [GEN] Thread started for paper ID: {exam_paper_id}")
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
-        
+
         # Step 1: Get Content
         exam_paper.generation_error = '[PROGRESS] Reading your paper...'
         exam_paper.save()
-        
-        data = None
-        mime = None
-        
+
+        content = None
+
         if exam_paper.extracted_text:
             print("DEBUG: [GEN] Using already extracted text.")
-            text_context = f"Context: {exam_paper.extracted_text[:15000]}"
-            content = text_context
+            content = f"Context from uploaded paper: {exam_paper.extracted_text[:15000]}"
         else:
-            data, mime, debug_info = _retrieve_file_data(exam_paper.file)
-            if not data:
-                raise ValueError(f"Could not read your paper file. (Method: {debug_info})")
-            content = [{'mime_type': mime, 'data': data}]
+            try:
+                data, mime, debug_info = _retrieve_file_data(exam_paper.file)
+                if data:
+                    print(f"DEBUG: [GEN] File downloaded successfully ({len(data)} bytes).")
+                    content = [{'mime_type': mime, 'data': data}]
+                else:
+                    print(f"DEBUG: [GEN] File download returned no data ({debug_info}), falling back to subject-only generation.")
+            except Exception as file_err:
+                print(f"DEBUG: [GEN] File retrieval failed: {file_err}. Falling back to subject-only generation.")
 
         # Step 2: AI Generation
         print("DEBUG: [GEN] Moving to AI thinking phase...")
@@ -92,32 +107,41 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
         exam_paper.save()
 
         api_key = str(settings.GEMINI_API_KEY).strip()
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not configured. Please add it in your Render dashboard.")
+
         model = get_gemini_model(api_key)
-        
-        prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long exam questions for Class 10 {exam_paper.subject.name}. Return ONLY valid JSON with a 'questions' key. Each question needs: type, text, marks, difficulty, options (A/B/C/D), correct answer, answer explanation."
-        
+
+        prompt = (
+            f"Generate {num_mcq} MCQ, {num_short} Short answer, and {num_long} Long answer exam questions "
+            f"for {exam_paper.subject.name}. "
+            "Return ONLY valid JSON with a 'questions' key containing a list. "
+            "Each question must have: question_type (MCQ/SHORT/LONG), question_text, marks (int), "
+            "difficulty (EASY/MEDIUM/HARD), option_a, option_b, option_c, option_d (for MCQ), "
+            "correct_answer (A/B/C/D for MCQ), model_answer (explanation/answer text)."
+        )
+
         print("DEBUG: [GEN] Sending request to Gemini AI...")
-        
         final_prompt = [prompt]
         if isinstance(content, list):
             final_prompt.extend(content)
-        else:
+        elif content:
             final_prompt.append(content)
-        
+
         try:
-            response = model.generate_content(final_prompt, request_options={'timeout': 45})
+            response = model.generate_content(final_prompt, request_options={'timeout': 55})
             print("DEBUG: [GEN] Gemini AI responded successfully.")
         except Exception as gemini_error:
             logger.error(f"Gemini API error: {str(gemini_error)}")
-            raise ValueError(f"AI service timeout or error. Try again in a moment. Error: {str(gemini_error)[:100]}")
-        
+            raise ValueError(f"AI service error. Please check your GEMINI_API_KEY and try again. ({str(gemini_error)[:120]})")
+
         exam_paper.generation_error = '[PROGRESS] Finalizing questions...'
         exam_paper.save()
 
         data_json = _extract_json(response.text)
         if not data_json or not data_json.get('questions'):
-            print(f"DEBUG: [GEN] Raw AI response text: {response.text[:200]}")
-            raise ValueError("The AI finished but could not format questions correctly. Please try again.")
+            print(f"DEBUG: [GEN] Raw AI response: {response.text[:300]}")
+            raise ValueError("AI returned an unexpected format. Please try again.")
 
         created_count = 0
         with transaction.atomic():
@@ -140,20 +164,15 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
                 except Exception as inner_e:
                     print(f"DEBUG: [GEN] Skipping malformed question: {str(inner_e)}")
                     continue
-        
+
         exam_paper.questions_generated = True
-        exam_paper.generation_error = '[SUCCESS] Done! Questions added to your Question Bank.'
+        exam_paper.generation_error = f'[SUCCESS] Done! {created_count} questions added to your Question Bank.'
         exam_paper.save()
         print(f"DEBUG: [GEN] Process complete! Saved {created_count} questions.")
-        
+
     except Exception as e:
         print(f"DEBUG: [GEN] CRITICAL ERROR: {str(e)}")
-        try:
-            db.connections.close_all()
-            ep = ExamPaper.objects.get(id=exam_paper_id)
-            ep.generation_error = f"Error: {str(e)}"
-            ep.save()
-        except: pass
+        _save_error(exam_paper_id, f"Error: {str(e)}")
 
 def generate_paper_from_multiple(paper_ids, instructions, subject, school, teacher, **kwargs):
     db.connections.close_all()
