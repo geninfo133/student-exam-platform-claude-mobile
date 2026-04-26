@@ -28,49 +28,27 @@ def get_gemini_model(api_key):
     return genai.GenerativeModel('gemini-1.5-flash')
 
 def _retrieve_file_data(file_field):
-    """Minimalist, high-speed file retrieval."""
+    """Simple, fast file retrieval with 10s timeout."""
     url = file_field.url
     mime, _ = mimetypes.guess_type(url)
     if not mime:
-        mime = 'image/png' if 'image' in url.lower() else 'application/pdf'
+        mime = 'application/pdf'
     
-    print(f"DEBUG: [FETCH] Attempting retrieval for URL: {url}")
-    
-    # 1. Direct GET (Fastest)
+    # Try direct HTTP GET first (fastest method)
     try:
-        print(f"DEBUG: [FETCH] Trying direct HTTP GET...")
-        resp = requests.get(url, timeout=15, headers={'User-Agent': 'Mozilla/5.0'})
-        print(f"DEBUG: [FETCH] HTTP GET returned status: {resp.status_code}")
+        resp = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         if resp.status_code == 200:
-            return resp.content, mime, "Direct-HTTP"
+            return resp.content, mime, "HTTP-OK"
+        elif resp.status_code == 401:
+            logger.warning(f"File 401 Unauthorized. File may be private/expired.")
+            raise ValueError("File access denied (401). Re-upload the PDF file.")
+    except requests.exceptions.Timeout:
+        raise ValueError("File download timeout. Check your internet connection.")
     except Exception as e:
-        print(f"DEBUG: [FETCH] Direct HTTP failed: {str(e)}")
-
-    # 2. Authenticated Cloudinary Fetch
-    keys = settings.CLOUDINARY_STORAGE
-    if keys.get('API_SECRET') and 'cloudinary' in url.lower():
-        try:
-            print(f"DEBUG: [FETCH] Trying Cloudinary Signed URL...")
-            cloudinary.config(cloud_name=keys['CLOUD_NAME'], api_key=keys['API_KEY'], api_secret=keys['API_SECRET'], secure=True)
-            # Simple ID extraction
-            public_id = url.split('/upload/')[-1].split('/')[-1].rsplit('.', 1)[0]
-            
-            for r_type in ['image', 'raw']:
-                try:
-                    s_url, _ = cloudinary.utils.cloudinary_url(public_id, sign_url=True, secure=True, resource_type=r_type)
-                    print(f"DEBUG: [FETCH] Generated {r_type} signed URL. Fetching...")
-                    resp = requests.get(s_url, timeout=15)
-                    print(f"DEBUG: [FETCH] Signed {r_type} request returned status: {resp.status_code}")
-                    if resp.status_code == 200:
-                        return resp.content, mime, f"Signed-{r_type}"
-                except Exception as inner_e:
-                    print(f"DEBUG: [FETCH] Signed {r_type} attempt error: {str(inner_e)}")
-                    continue
-        except Exception as e:
-            print(f"DEBUG: [FETCH] Cloudinary SDK logic failed: {str(e)}")
-
-    print("DEBUG: [FETCH] All retrieval methods failed.")
-    return None, None, "All retrieval methods failed"
+        logger.error(f"File fetch error: {e}")
+        raise ValueError(f"Could not download file: {str(e)}")
+    
+    return None, None, "Failed"
 
 def _extract_json(text):
     text = text.strip()
@@ -128,7 +106,7 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         else:
             final_prompt.append(content)
             
-        response = model.generate_content(final_prompt, request_options={'timeout': 400})
+        response = model.generate_content(final_prompt, request_options={'timeout': 60})
         print("DEBUG: [GEN] Gemini AI responded successfully.")
         
         exam_paper.generation_error = '[PROGRESS] Finalizing questions...'
