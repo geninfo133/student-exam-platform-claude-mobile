@@ -63,7 +63,7 @@ def _extract_json(text):
             except: pass
     return None
 
-def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, num_short=5, num_long=4):
+def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, num_short=2, num_long=2):
     try:
         print(f"DEBUG: [GEN] Thread started for paper ID: {exam_paper_id}")
         db.connections.close_all()
@@ -94,9 +94,7 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
         api_key = str(settings.GEMINI_API_KEY).strip()
         model = get_gemini_model(api_key)
         
-        prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long questions for Class 10 {exam_paper.subject.name}."
-        if instructions: prompt += f"\nSpecific Instructions: {instructions}"
-        prompt += '\nReturn ONLY a JSON object with a "questions" key containing the list of questions.'
+        prompt = f"Generate {num_mcq} MCQ, {num_short} Short, and {num_long} Long exam questions for Class 10 {exam_paper.subject.name}. Return ONLY valid JSON with a 'questions' key. Each question needs: type, text, marks, difficulty, options (A/B/C/D), correct answer, answer explanation."
         
         print("DEBUG: [GEN] Sending request to Gemini AI...")
         
@@ -105,9 +103,13 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=20, 
             final_prompt.extend(content)
         else:
             final_prompt.append(content)
-            
-        response = model.generate_content(final_prompt, request_options={'timeout': 60})
-        print("DEBUG: [GEN] Gemini AI responded successfully.")
+        
+        try:
+            response = model.generate_content(final_prompt, request_options={'timeout': 45})
+            print("DEBUG: [GEN] Gemini AI responded successfully.")
+        except Exception as gemini_error:
+            logger.error(f"Gemini API error: {str(gemini_error)}")
+            raise ValueError(f"AI service timeout or error. Try again in a moment. Error: {str(gemini_error)[:100]}")
         
         exam_paper.generation_error = '[PROGRESS] Finalizing questions...'
         exam_paper.save()
