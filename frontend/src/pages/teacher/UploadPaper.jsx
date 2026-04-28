@@ -2,214 +2,169 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../api/axios';
 
+const INPUT_CLS = 'w-full px-4 py-2.5 border-2 border-gray-100 rounded-xl focus:outline-none focus:border-indigo-400 transition bg-gray-50 text-sm';
+const LABEL_CLS = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
+
 export default function UploadPaper() {
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState([]);
-  const [form, setForm] = useState({
-    title: '',
-    subject: '',
-    chapter: '',
-    total_marks: 50,
-    file: null,
-  });
+  const [form, setForm] = useState({ title: '', subject: '', chapter: '', total_marks: 50, file: null });
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const fetchSubjects = async () => {
-      try {
-        const res = await api.get('/api/subjects/');
-        setSubjects(res.data.results || res.data);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchSubjects();
+    api.get('/api/subjects/').then(res => setSubjects(res.data.results || res.data)).catch(console.error);
   }, []);
 
   useEffect(() => {
-    if (!form.subject) {
-      setChapters([]);
-      setForm((prev) => ({ ...prev, chapter: '' }));
-      return;
-    }
-    const fetchChapters = async () => {
-      try {
-        const res = await api.get('/api/chapters/', { params: { subject: form.subject } });
-        setChapters(res.data.results || res.data);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-    fetchChapters();
+    if (!form.subject) { setChapters([]); setForm(p => ({ ...p, chapter: '' })); return; }
+    api.get('/api/chapters/', { params: { subject: form.subject } })
+      .then(res => setChapters(res.data.results || res.data)).catch(console.error);
   }, [form.subject]);
 
   const handleChange = (e) => {
     const { name, value, files } = e.target;
-    if (name === 'file') {
-      setForm((prev) => ({ ...prev, file: files[0] }));
-    } else {
-      setForm((prev) => ({ ...prev, [name]: value }));
-    }
+    if (name === 'file') setForm(p => ({ ...p, file: files[0] }));
+    else setForm(p => ({ ...p, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
+    setLoading(true); setError(''); setSuccess('');
     try {
-      const formData = new FormData();
-      formData.append('title', form.title);
-      formData.append('subject', form.subject);
-      if (form.chapter) formData.append('chapter', form.chapter);
-      formData.append('total_marks', form.total_marks);
-      formData.append('file', form.file);
-
-      await api.post('/api/exams/papers/upload/', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
+      const fd = new FormData();
+      fd.append('title', form.title);
+      fd.append('subject', form.subject);
+      if (form.chapter) fd.append('chapter', form.chapter);
+      fd.append('total_marks', form.total_marks);
+      fd.append('file', form.file);
+      await api.post('/api/exams/papers/upload/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setSuccess('Paper uploaded successfully! You can now generate questions from the Papers list.');
       setForm({ title: '', subject: '', chapter: '', total_marks: 50, file: null });
-      // Reset file input
-      const fileInput = document.getElementById('paper-file-input');
-      if (fileInput) fileInput.value = '';
+      const fi = document.getElementById('paper-file-input');
+      if (fi) fi.value = '';
     } catch (err) {
-      console.error('Upload error:', err);
-      const msg = err.response?.data?.detail || err.response?.data?.error || JSON.stringify(err.response?.data) || 'Failed to upload paper. Please try again.';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
+      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to upload paper. Please try again.');
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/teacher/dashboard" className="text-gray-400 hover:text-gray-600 transition">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </Link>
-        <h1 className="text-2xl font-bold text-gray-800">Upload Paper</h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Banner */}
+      <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 overflow-hidden">
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80')`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute top-10 right-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl" />
+
+        <div className="relative max-w-7xl mx-auto px-4 py-12">
+          <Link to="/teacher/papers" className="inline-flex items-center gap-2 text-indigo-300 hover:text-white text-sm mb-6 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Papers List
+          </Link>
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-indigo-300 text-sm font-medium uppercase tracking-wider">Teacher</p>
+              <h1 className="text-3xl font-bold text-white">Upload Paper</h1>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {success && (
-        <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6">
-          <p className="text-green-700 font-medium">{success}</p>
-          <Link to="/teacher/papers" className="text-green-600 text-sm font-medium hover:underline mt-1 inline-block">
-            Go to Papers List
-          </Link>
-        </div>
-      )}
+      {/* Content */}
+      <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
+        {success && (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4">
+            <p className="text-emerald-800 font-semibold text-sm">{success}</p>
+            <Link to="/teacher/papers" className="text-emerald-600 text-sm font-medium hover:underline mt-1 inline-block">
+              Go to Papers List →
+            </Link>
+          </div>
+        )}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-2xl p-4">
+            <p className="text-red-700 text-sm">{error}</p>
+          </div>
+        )}
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-          <p className="text-red-700">{error}</p>
-        </div>
-      )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Details card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-4">
+              <p className="font-semibold text-white text-sm">Paper Details</p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className={LABEL_CLS}>Paper Title</label>
+                <input type="text" name="title" value={form.title} onChange={handleChange} required className={INPUT_CLS} placeholder="e.g. Mid-term Physics Paper 2024" />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Subject</label>
+                <select name="subject" value={form.subject} onChange={handleChange} required className={INPUT_CLS}>
+                  <option value="">Select Subject</option>
+                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Chapter <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
+                <select name="chapter" value={form.chapter} onChange={handleChange} disabled={!form.subject} className={INPUT_CLS + ' disabled:opacity-50'}>
+                  <option value="">All Chapters</option>
+                  {chapters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Total Marks</label>
+                <input type="number" name="total_marks" value={form.total_marks} onChange={handleChange} min="1" required className={INPUT_CLS} />
+              </div>
+            </div>
+          </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
-        {/* Title */}
-        <div>
-          <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">Paper Title</label>
-          <input
-            type="text"
-            id="title"
-            name="title"
-            value={form.title}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-            placeholder="e.g. Mid-term Physics Paper 2024"
-          />
-        </div>
+          {/* File upload card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-500 to-cyan-600 px-5 py-4">
+              <p className="font-semibold text-white text-sm">PDF File</p>
+            </div>
+            <div className="p-5">
+              <label className="flex flex-col items-center justify-center border-2 border-dashed border-blue-200 rounded-xl p-8 cursor-pointer hover:bg-blue-50 hover:border-blue-400 transition bg-gray-50">
+                <svg className="w-10 h-10 text-blue-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {form.file ? (
+                  <div className="text-center">
+                    <p className="text-sm font-semibold text-gray-800">{form.file.name}</p>
+                    <p className="text-xs text-gray-400 mt-1">{(form.file.size / 1024).toFixed(0)} KB — click to change</p>
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600 font-medium">Click to select a PDF</p>
+                    <p className="text-xs text-gray-400 mt-1">Only PDF files are accepted</p>
+                  </div>
+                )}
+                <input type="file" id="paper-file-input" name="file" accept=".pdf" onChange={handleChange} required className="hidden" />
+              </label>
+            </div>
+          </div>
 
-        {/* Subject */}
-        <div>
-          <label htmlFor="subject" className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-          <select
-            id="subject"
-            name="subject"
-            value={form.subject}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
+          <button
+            type="submit" disabled={loading}
+            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold transition-all disabled:opacity-50 shadow-sm"
           >
-            <option value="">Select Subject</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Chapter */}
-        <div>
-          <label htmlFor="chapter" className="block text-sm font-medium text-gray-700 mb-1">Chapter (optional)</label>
-          <select
-            id="chapter"
-            name="chapter"
-            value={form.chapter}
-            onChange={handleChange}
-            disabled={!form.subject}
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition disabled:bg-gray-100 disabled:text-gray-400"
-          >
-            <option value="">All Chapters</option>
-            {chapters.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Total Marks */}
-        <div>
-          <label htmlFor="total_marks" className="block text-sm font-medium text-gray-700 mb-1">Total Marks</label>
-          <input
-            type="number"
-            id="total_marks"
-            name="total_marks"
-            value={form.total_marks}
-            onChange={handleChange}
-            min="1"
-            required
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-          />
-        </div>
-
-        {/* File */}
-        <div>
-          <label htmlFor="paper-file-input" className="block text-sm font-medium text-gray-700 mb-1">PDF File</label>
-          <input
-            type="file"
-            id="paper-file-input"
-            name="file"
-            accept=".pdf"
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition file:mr-4 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-          />
-          <p className="text-xs text-gray-400 mt-1">Only PDF files are accepted</p>
-        </div>
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-indigo-600 text-white py-3 rounded-xl font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {loading ? (
-            <span className="flex items-center justify-center gap-2">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-              Uploading...
-            </span>
-          ) : (
-            'Upload Paper'
-          )}
-        </button>
-      </form>
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                Uploading…
+              </span>
+            ) : 'Upload Paper'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

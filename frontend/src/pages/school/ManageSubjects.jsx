@@ -2,34 +2,39 @@ import { useState, useEffect } from 'react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 
+const INPUT_CLS = 'w-full px-4 py-2.5 border-2 border-gray-100 rounded-xl focus:outline-none focus:border-indigo-400 transition bg-gray-50 text-sm';
+const LABEL_CLS = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
+const COMPACT_INPUT = 'w-full px-3 py-2 border-2 border-gray-100 rounded-xl focus:outline-none focus:border-indigo-400 transition bg-gray-50 text-sm';
+
+const SUBJECT_PALETTE = [
+  'from-indigo-500 to-violet-600', 'from-blue-500 to-cyan-600', 'from-emerald-500 to-teal-600',
+  'from-amber-500 to-orange-500', 'from-pink-500 to-rose-600', 'from-purple-500 to-fuchsia-600',
+];
+
 export default function ManageSubjects() {
   const { user } = useAuth();
   const isCoaching = user?.org_type === 'coaching';
   const classFrom = user?.class_from || 1;
   const classTo = user?.class_to || 12;
   const classRange = isCoaching ? [] : Array.from({ length: classTo - classFrom + 1 }, (_, i) => classFrom + i);
+
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState({ text: '', type: '' });
-  const [bgImages, setBgImages] = useState({});
 
-  // Subject form
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [subjectForm, setSubjectForm] = useState({ name: '', code: '', grade: '' });
   const [submittingSubject, setSubmittingSubject] = useState(false);
 
-  // Chapter form
   const [chapterForSubject, setChapterForSubject] = useState(null);
   const [chapterForm, setChapterForm] = useState({ name: '', code: '' });
   const [submittingChapter, setSubmittingChapter] = useState(false);
 
-  // Edit subject
   const [editingSubjectId, setEditingSubjectId] = useState(null);
   const [editSubjectForm, setEditSubjectForm] = useState({ name: '', code: '' });
   const [savingSubject, setSavingSubject] = useState(false);
 
-  // Edit chapter
   const [editingChapterId, setEditingChapterId] = useState(null);
   const [editChapterForm, setEditChapterForm] = useState({ name: '', code: '' });
   const [savingChapter, setSavingChapter] = useState(false);
@@ -37,45 +42,24 @@ export default function ManageSubjects() {
   const [expandedSubject, setExpandedSubject] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
-  const showMsg = (text, type = 'success') => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage({ text: '', type: '' }), 4000);
-  };
+  const showMsg = (text, type = 'success') => { setMessage({ text, type }); setTimeout(() => setMessage({ text: '', type: '' }), 4000); };
 
   const fetchSubjects = async () => {
-    try {
-      const res = await api.get('/api/subjects/');
-      setSubjects(res.data.results || res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    try { const res = await api.get('/api/subjects/'); setSubjects(res.data.results || res.data); }
+    catch (err) { console.error(err); }
+    finally { setLoading(false); }
   };
 
   const fetchChapters = async (subjectId) => {
-    try {
-      const res = await api.get('/api/chapters/', { params: { subject: subjectId } });
-      setChapters((prev) => ({ ...prev, [subjectId]: res.data.results || res.data }));
-    } catch (err) {
-      console.error(err);
-    }
+    try { const res = await api.get('/api/chapters/', { params: { subject: subjectId } }); setChapters(prev => ({ ...prev, [subjectId]: res.data.results || res.data })); }
+    catch (err) { console.error(err); }
   };
 
-  useEffect(() => {
-    api.get('/api/site-images/').then(res => setBgImages(res.data)).catch(() => {});
-    fetchSubjects();
-  }, []);
+  useEffect(() => { fetchSubjects(); }, []);
 
   const toggleExpand = (subjectId) => {
-    if (expandedSubject === subjectId) {
-      setExpandedSubject(null);
-    } else {
-      setExpandedSubject(subjectId);
-      if (!chapters[subjectId]) {
-        fetchChapters(subjectId);
-      }
-    }
+    if (expandedSubject === subjectId) { setExpandedSubject(null); }
+    else { setExpandedSubject(subjectId); if (!chapters[subjectId]) fetchChapters(subjectId); }
   };
 
   const handleCreateSubject = async (e) => {
@@ -83,30 +67,17 @@ export default function ManageSubjects() {
     setSubmittingSubject(true);
     try {
       await api.post('/api/subjects/create/', subjectForm);
-      showMsg('Subject created successfully!');
-      setSubjectForm({ name: '', code: '', grade: '' });
-      setShowSubjectForm(false);
-      fetchSubjects();
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to create subject.';
-      showMsg(msg, 'error');
-    } finally {
-      setSubmittingSubject(false);
-    }
+      showMsg('Subject created successfully!'); setSubjectForm({ name: '', code: '', grade: '' }); setShowSubjectForm(false); fetchSubjects();
+    } catch (err) { showMsg(err.response?.data?.error || 'Failed to create subject.', 'error'); }
+    finally { setSubmittingSubject(false); }
   };
 
   const handleDeleteSubject = async (id) => {
     if (!window.confirm('Delete this subject and all its chapters/questions?')) return;
     setDeleting(`subject-${id}`);
-    try {
-      await api.delete(`/api/subjects/${id}/`);
-      showMsg('Subject deleted.');
-      fetchSubjects();
-    } catch {
-      showMsg('Failed to delete subject.', 'error');
-    } finally {
-      setDeleting(null);
-    }
+    try { await api.delete(`/api/subjects/${id}/`); showMsg('Subject deleted.'); fetchSubjects(); }
+    catch { showMsg('Failed to delete subject.', 'error'); }
+    finally { setDeleting(null); }
   };
 
   const handleCreateChapter = async (e) => {
@@ -114,430 +85,287 @@ export default function ManageSubjects() {
     setSubmittingChapter(true);
     try {
       await api.post('/api/chapters/create/', { ...chapterForm, subject: chapterForSubject });
-      showMsg('Chapter created successfully!');
-      setChapterForm({ name: '', code: '' });
-      setChapterForSubject(null);
-      fetchChapters(chapterForSubject);
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to create chapter.';
-      showMsg(msg, 'error');
-    } finally {
-      setSubmittingChapter(false);
-    }
+      showMsg('Chapter created successfully!'); setChapterForm({ name: '', code: '' }); setChapterForSubject(null); fetchChapters(chapterForSubject);
+    } catch (err) { showMsg(err.response?.data?.error || 'Failed to create chapter.', 'error'); }
+    finally { setSubmittingChapter(false); }
   };
 
   const handleDeleteChapter = async (subjectId, chapterId) => {
     if (!window.confirm('Delete this chapter?')) return;
     setDeleting(`chapter-${chapterId}`);
-    try {
-      await api.delete(`/api/chapters/${chapterId}/`);
-      showMsg('Chapter deleted.');
-      fetchChapters(subjectId);
-    } catch {
-      showMsg('Failed to delete chapter.', 'error');
-    } finally {
-      setDeleting(null);
-    }
-  };
-
-  const startEditSubject = (subject) => {
-    setEditingSubjectId(subject.id);
-    setEditSubjectForm({ name: subject.name, code: subject.code });
-  };
-
-  const cancelEditSubject = () => {
-    setEditingSubjectId(null);
-    setEditSubjectForm({ name: '', code: '' });
+    try { await api.delete(`/api/chapters/${chapterId}/`); showMsg('Chapter deleted.'); fetchChapters(subjectId); }
+    catch { showMsg('Failed to delete chapter.', 'error'); }
+    finally { setDeleting(null); }
   };
 
   const handleSaveSubject = async (id) => {
     setSavingSubject(true);
-    try {
-      await api.patch(`/api/subjects/${id}/update/`, editSubjectForm);
-      showMsg('Subject updated successfully!');
-      cancelEditSubject();
-      fetchSubjects();
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to update subject.';
-      showMsg(msg, 'error');
-    } finally {
-      setSavingSubject(false);
-    }
-  };
-
-  const startEditChapter = (chapter) => {
-    setEditingChapterId(chapter.id);
-    setEditChapterForm({ name: chapter.name, code: chapter.code });
-  };
-
-  const cancelEditChapter = () => {
-    setEditingChapterId(null);
-    setEditChapterForm({ name: '', code: '' });
+    try { await api.patch(`/api/subjects/${id}/update/`, editSubjectForm); showMsg('Subject updated!'); setEditingSubjectId(null); fetchSubjects(); }
+    catch (err) { showMsg(err.response?.data?.error || 'Failed to update subject.', 'error'); }
+    finally { setSavingSubject(false); }
   };
 
   const handleSaveChapter = async (subjectId, chapterId) => {
     setSavingChapter(true);
-    try {
-      await api.patch(`/api/chapters/${chapterId}/update/`, editChapterForm);
-      showMsg('Chapter updated successfully!');
-      cancelEditChapter();
-      fetchChapters(subjectId);
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to update chapter.';
-      showMsg(msg, 'error');
-    } finally {
-      setSavingChapter(false);
-    }
+    try { await api.patch(`/api/chapters/${chapterId}/update/`, editChapterForm); showMsg('Chapter updated!'); setEditingChapterId(null); fetchChapters(subjectId); }
+    catch (err) { showMsg(err.response?.data?.error || 'Failed to update chapter.', 'error'); }
+    finally { setSavingChapter(false); }
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent" />
+    </div>
+  );
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* Header with Background Image */}
-      <div
-        className="rounded-2xl p-8 md:p-10 text-white mb-8 bg-cover bg-center relative overflow-hidden"
-        style={bgImages.manage_subjects?.url ? { backgroundImage: `url(${bgImages.manage_subjects.url})` } : {}}
-      >
-        <div className={`absolute inset-0 ${bgImages.manage_subjects?.url ? 'bg-black/50' : 'bg-gradient-to-r from-gray-900 to-indigo-600'}`}></div>
-        <div className="relative z-10">
-          <h1 className="text-2xl md:text-3xl font-bold">Manage Subjects & Chapters</h1>
-          <p className="mt-2 text-white/80">{isCoaching ? 'Create subjects and organize chapters for your coaching programme.' : 'Create subjects and organize chapters for your school curriculum.'}</p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Banner */}
+      <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 overflow-hidden">
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80')`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute top-10 right-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl" />
+
+        <div className="relative max-w-7xl mx-auto px-4 py-12">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg flex-shrink-0">
+                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-indigo-300 text-sm font-medium uppercase tracking-wider">School Admin</p>
+                <h1 className="text-3xl font-bold text-white">Subjects & Chapters</h1>
+                <p className="text-indigo-200 text-sm mt-0.5">{isCoaching ? 'Manage subjects and chapters for your coaching programme.' : 'Manage subjects and chapters for your school curriculum.'}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowSubjectForm(!showSubjectForm)}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 font-semibold rounded-xl text-sm transition-all shadow-sm ${showSubjectForm ? 'bg-white/10 border border-white/20 text-white hover:bg-white/20' : 'bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white'}`}
+            >
+              {showSubjectForm
+                ? <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>Cancel</>
+                : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Add Subject</>
+              }
+            </button>
+          </div>
+          <div className="flex gap-3">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
+              <p className="text-2xl font-bold text-white">{subjects.length}</p>
+              <p className="text-indigo-200 text-xs mt-0.5">Subjects</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
+              <p className="text-2xl font-bold text-white">{subjects.reduce((s, sub) => s + (sub.chapter_count || 0), 0)}</p>
+              <p className="text-indigo-200 text-xs mt-0.5">Chapters</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Message */}
-      {message.text && (
-        <div className={`px-4 py-3 rounded-lg mb-6 text-sm font-medium flex items-center gap-2 ${message.type === 'success' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {message.type === 'success' ? (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            ) : (
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            )}
-          </svg>
-          {message.text}
-        </div>
-      )}
+      {/* Content */}
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
+        {message.text && (
+          <div className={`rounded-2xl p-4 border ${message.type === 'success' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+            <p className={`text-sm font-semibold ${message.type === 'success' ? 'text-emerald-800' : 'text-red-700'}`}>{message.text}</p>
+          </div>
+        )}
 
-      {/* Actions Bar */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-gray-800">Subjects ({subjects.length})</h2>
-        <button
-          onClick={() => setShowSubjectForm(!showSubjectForm)}
-          className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition flex items-center gap-2 shadow-sm"
-        >
-          {showSubjectForm ? (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Cancel
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Add Subject
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Create Subject Form */}
-      {showSubjectForm && (
-        <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-5">Create New Subject</h3>
-          <form onSubmit={handleCreateSubject} className="space-y-5">
-            {!isCoaching && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Class *</label>
-                <select
-                  value={subjectForm.grade}
-                  onChange={(e) => setSubjectForm({ ...subjectForm, grade: e.target.value })}
-                  required
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none bg-white transition"
-                >
-                  <option value="">Select Class</option>
-                  {classRange.map(g => (
-                    <option key={g} value={String(g)}>Class {g}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subject Name *</label>
-                <input
-                  value={subjectForm.name}
-                  onChange={(e) => setSubjectForm({ ...subjectForm, name: e.target.value })}
-                  required
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  placeholder="e.g. Mathematics"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Code *</label>
-                <input
-                  value={subjectForm.code}
-                  onChange={(e) => setSubjectForm({ ...subjectForm, code: e.target.value.toUpperCase() })}
-                  required
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                  placeholder="e.g. MATH10"
-                />
-              </div>
+        {/* Create Subject Form */}
+        {showSubjectForm && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-4">
+              <p className="font-semibold text-white text-sm">Create New Subject</p>
             </div>
-            <div className="flex gap-3 pt-2">
-              <button
-                type="submit"
-                disabled={submittingSubject}
-                className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
-              >
-                {submittingSubject ? 'Creating...' : 'Create Subject'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setShowSubjectForm(false); setSubjectForm({ name: '', code: '', grade: '' }); }}
-                className="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+            <form onSubmit={handleCreateSubject} className="p-5 space-y-4">
+              {!isCoaching && (
+                <div>
+                  <label className={LABEL_CLS}>Class *</label>
+                  <select value={subjectForm.grade} onChange={e => setSubjectForm({ ...subjectForm, grade: e.target.value })} required className={INPUT_CLS}>
+                    <option value="">Select Class</option>
+                    {classRange.map(g => <option key={g} value={String(g)}>Class {g}</option>)}
+                  </select>
+                </div>
+              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className={LABEL_CLS}>Subject Name *</label>
+                  <input value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} required className={INPUT_CLS} placeholder="e.g. Mathematics" />
+                </div>
+                <div>
+                  <label className={LABEL_CLS}>Code *</label>
+                  <input value={subjectForm.code} onChange={e => setSubjectForm({ ...subjectForm, code: e.target.value.toUpperCase() })} required className={INPUT_CLS} placeholder="e.g. MATH10" />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" disabled={submittingSubject} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold text-sm transition-all disabled:opacity-50 shadow-sm">
+                  {submittingSubject ? 'Creating…' : 'Create Subject'}
+                </button>
+                <button type="button" onClick={() => { setShowSubjectForm(false); setSubjectForm({ name: '', code: '', grade: '' }); }} className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm hover:border-gray-300 hover:bg-gray-50 transition">
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
-      {/* Subjects List */}
-      {subjects.length === 0 ? (
-        <div className="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-100">
-          <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
-          <p className="text-gray-500 mb-2">No subjects created yet.</p>
-          <button onClick={() => setShowSubjectForm(true)} className="text-indigo-600 font-medium hover:underline">
-            Create your first subject
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {subjects.map((subject) => (
-            <div key={subject.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              {/* Subject Header */}
-              <div
-                className="flex items-center justify-between p-5 cursor-pointer hover:bg-gray-50 transition"
-                onClick={() => toggleExpand(subject.id)}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-indigo-50 text-indigo-600 p-2.5 rounded-lg">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        {/* Subjects List */}
+        {subjects.length === 0 ? (
+          <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
+            <div className="w-16 h-16 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-1">No subjects yet</h3>
+            <button onClick={() => setShowSubjectForm(true)} className="text-indigo-600 font-medium text-sm hover:underline">Create your first subject →</button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {subjects.map((subject, idx) => (
+              <div key={subject.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                {/* Subject Header */}
+                <div className="flex items-center justify-between p-5 cursor-pointer hover:bg-gray-50/50 transition" onClick={() => toggleExpand(subject.id)}>
+                  <div className="flex items-center gap-4">
+                    <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${SUBJECT_PALETTE[idx % SUBJECT_PALETTE.length]} flex items-center justify-center shadow-sm flex-shrink-0`}>
+                      <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-semibold text-gray-800">{subject.name}</h3>
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{subject.code}</span>
+                        {!isCoaching && subject.grade && (
+                          <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-medium">Class {subject.grade}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{subject.chapter_count || 0} chapters · {subject.question_count || 0} questions</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={e => { e.stopPropagation(); setEditingSubjectId(subject.id); setEditSubjectForm({ name: subject.name, code: subject.code }); }}
+                      className="px-3 py-1.5 rounded-xl text-indigo-600 text-sm font-semibold hover:bg-indigo-50 border-2 border-indigo-100 hover:border-indigo-200 transition">
+                      Edit
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); handleDeleteSubject(subject.id); }} disabled={deleting === `subject-${subject.id}`}
+                      className="px-3 py-1.5 rounded-xl text-red-500 text-sm font-semibold hover:bg-red-50 border-2 border-gray-100 hover:border-red-200 transition disabled:opacity-50">
+                      {deleting === `subject-${subject.id}` ? '…' : 'Delete'}
+                    </button>
+                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${expandedSubject === subject.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-800">{subject.name}</h3>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      {!isCoaching && subject.grade && (
-                        <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-medium">Class {subject.grade}</span>
-                      )}
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{subject.code}</span>
-                      <span className="text-xs text-gray-400">{subject.chapter_count || 0} chapters</span>
-                      <span className="text-xs text-gray-400">{subject.question_count || 0} questions</span>
-                    </div>
-                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); startEditSubject(subject); }}
-                    className="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-100 transition"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeleteSubject(subject.id); }}
-                    disabled={deleting === `subject-${subject.id}`}
-                    className="bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-red-100 transition disabled:opacity-50"
-                  >
-                    {deleting === `subject-${subject.id}` ? 'Deleting...' : 'Delete'}
-                  </button>
-                  <svg className={`w-5 h-5 text-gray-400 transition-transform ${expandedSubject === subject.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
 
-              {/* Inline Edit Subject Form */}
-              {editingSubjectId === subject.id && (
-                <div className="border-t border-gray-100 bg-indigo-50/30 px-5 py-4">
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div className="flex-1 min-w-[160px]">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                      <input
-                        value={editSubjectForm.name}
-                        onChange={(e) => setEditSubjectForm({ ...editSubjectForm, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                        placeholder="Subject name"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-[120px]">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Code</label>
-                      <input
-                        value={editSubjectForm.code}
-                        onChange={(e) => setEditSubjectForm({ ...editSubjectForm, code: e.target.value.toUpperCase() })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                        placeholder="Code"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleSaveSubject(subject.id)}
-                        disabled={savingSubject}
-                        className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
-                      >
-                        {savingSubject ? 'Saving...' : 'Save'}
-                      </button>
-                      <button
-                        onClick={cancelEditSubject}
-                        className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Chapters (expanded) */}
-              {expandedSubject === subject.id && (
-                <div className="border-t border-gray-100 bg-gray-50 p-5">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="text-sm font-semibold text-gray-700">Chapters</h4>
-                    <button
-                      onClick={() => setChapterForSubject(chapterForSubject === subject.id ? null : subject.id)}
-                      className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition"
-                    >
-                      {chapterForSubject === subject.id ? 'Cancel' : '+ Add Chapter'}
-                    </button>
-                  </div>
-
-                  {/* Add Chapter Form */}
-                  {chapterForSubject === subject.id && (
-                    <form onSubmit={handleCreateChapter} className="bg-white rounded-lg p-4 mb-3 border border-gray-200">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <input
-                          value={chapterForm.name}
-                          onChange={(e) => setChapterForm({ ...chapterForm, name: e.target.value })}
-                          required
-                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                          placeholder="Chapter name"
-                        />
-                        <input
-                          value={chapterForm.code}
-                          onChange={(e) => setChapterForm({ ...chapterForm, code: e.target.value.toUpperCase() })}
-                          required
-                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                          placeholder="Code (e.g. CH01)"
-                        />
+                {/* Inline Edit Subject */}
+                {editingSubjectId === subject.id && (
+                  <div className="border-t border-gray-100 bg-indigo-50/30 px-5 py-4">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="flex-1 min-w-[160px]">
+                        <label className={LABEL_CLS}>Name</label>
+                        <input value={editSubjectForm.name} onChange={e => setEditSubjectForm({ ...editSubjectForm, name: e.target.value })} className={COMPACT_INPUT} placeholder="Subject name" />
                       </div>
-                      <button
-                        type="submit"
-                        disabled={submittingChapter}
-                        className="mt-3 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
-                      >
-                        {submittingChapter ? 'Creating...' : 'Create Chapter'}
-                      </button>
-                    </form>
-                  )}
-
-                  {/* Chapters List */}
-                  {!chapters[subject.id] ? (
-                    <div className="flex justify-center py-4">
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                      <div className="flex-1 min-w-[120px]">
+                        <label className={LABEL_CLS}>Code</label>
+                        <input value={editSubjectForm.code} onChange={e => setEditSubjectForm({ ...editSubjectForm, code: e.target.value.toUpperCase() })} className={COMPACT_INPUT} placeholder="Code" />
+                      </div>
+                      <div className="flex gap-2 self-end">
+                        <button onClick={() => handleSaveSubject(subject.id)} disabled={savingSubject} className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-sm font-semibold disabled:opacity-50 shadow-sm">
+                          {savingSubject ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingSubjectId(null)} className="px-4 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 text-sm font-semibold hover:bg-gray-50">Cancel</button>
+                      </div>
                     </div>
-                  ) : chapters[subject.id].length === 0 ? (
-                    <p className="text-sm text-gray-400 py-2">No chapters yet. Add one above.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {chapters[subject.id].map((ch) => (
-                        <div key={ch.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-2.5">
-                            <div>
-                              <span className="text-sm font-medium text-gray-700">{ch.name}</span>
-                              <span className="text-xs text-gray-400 ml-2">({ch.code})</span>
-                              <span className="text-xs text-gray-400 ml-2">{ch.question_count || 0} questions</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => startEditChapter(ch)}
-                                className="text-indigo-600 hover:text-indigo-800 text-xs font-medium"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                onClick={() => handleDeleteChapter(subject.id, ch.id)}
-                                disabled={deleting === `chapter-${ch.id}`}
-                                className="text-red-500 hover:text-red-700 text-xs font-medium"
-                              >
-                                {deleting === `chapter-${ch.id}` ? 'Deleting...' : 'Delete'}
-                              </button>
-                            </div>
-                          </div>
-                          {/* Inline Edit Chapter Form */}
-                          {editingChapterId === ch.id && (
-                            <div className="border-t border-gray-100 bg-indigo-50/30 px-4 py-3">
-                              <div className="flex flex-wrap items-end gap-3">
-                                <div className="flex-1 min-w-[140px]">
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
-                                  <input
-                                    value={editChapterForm.name}
-                                    onChange={(e) => setEditChapterForm({ ...editChapterForm, name: e.target.value })}
-                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                                    placeholder="Chapter name"
-                                  />
-                                </div>
-                                <div className="flex-1 min-w-[100px]">
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Code</label>
-                                  <input
-                                    value={editChapterForm.code}
-                                    onChange={(e) => setEditChapterForm({ ...editChapterForm, code: e.target.value.toUpperCase() })}
-                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
-                                    placeholder="Code"
-                                  />
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={() => handleSaveChapter(subject.id, ch.id)}
-                                    disabled={savingChapter}
-                                    className="bg-indigo-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-700 transition disabled:opacity-50 shadow-sm"
-                                  >
-                                    {savingChapter ? 'Saving...' : 'Save'}
-                                  </button>
-                                  <button
-                                    onClick={cancelEditChapter}
-                                    className="bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-200 transition"
-                                  >
-                                    Cancel
-                                  </button>
+                  </div>
+                )}
+
+                {/* Chapters */}
+                {expandedSubject === subject.id && (
+                  <div className="border-t border-gray-100 bg-gray-50 p-5">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-sm font-semibold text-gray-700">Chapters</h4>
+                      <button
+                        onClick={() => setChapterForSubject(chapterForSubject === subject.id ? null : subject.id)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white text-xs font-semibold transition"
+                      >
+                        {chapterForSubject === subject.id ? 'Cancel' : '+ Add Chapter'}
+                      </button>
+                    </div>
+
+                    {/* Add Chapter Form */}
+                    {chapterForSubject === subject.id && (
+                      <form onSubmit={handleCreateChapter} className="bg-white rounded-xl p-4 mb-3 border border-gray-200">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <input value={chapterForm.name} onChange={e => setChapterForm({ ...chapterForm, name: e.target.value })} required className={COMPACT_INPUT} placeholder="Chapter name" />
+                          <input value={chapterForm.code} onChange={e => setChapterForm({ ...chapterForm, code: e.target.value.toUpperCase() })} required className={COMPACT_INPUT} placeholder="Code (e.g. CH01)" />
+                        </div>
+                        <button type="submit" disabled={submittingChapter} className="mt-3 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold disabled:opacity-50 shadow-sm">
+                          {submittingChapter ? 'Creating…' : 'Create Chapter'}
+                        </button>
+                      </form>
+                    )}
+
+                    {/* Chapter List */}
+                    {!chapters[subject.id] ? (
+                      <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-500 border-t-transparent" /></div>
+                    ) : chapters[subject.id].length === 0 ? (
+                      <p className="text-sm text-gray-400 py-2">No chapters yet. Add one above.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {chapters[subject.id].map((ch, chIdx) => (
+                          <div key={ch.id} className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                            <div className="flex items-center justify-between px-4 py-2.5">
+                              <div className="flex items-center gap-3">
+                                <span className={`w-7 h-7 rounded-lg bg-gradient-to-br ${SUBJECT_PALETTE[idx % SUBJECT_PALETTE.length]} flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
+                                  {chIdx + 1}
+                                </span>
+                                <div>
+                                  <span className="text-sm font-medium text-gray-700">{ch.name}</span>
+                                  <span className="text-xs text-gray-400 ml-2">({ch.code})</span>
+                                  <span className="text-xs text-gray-400 ml-2">{ch.question_count || 0} questions</span>
                                 </div>
                               </div>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => { setEditingChapterId(ch.id); setEditChapterForm({ name: ch.name, code: ch.code }); }} className="px-2.5 py-1 rounded-lg text-indigo-600 text-xs font-semibold hover:bg-indigo-50 border border-indigo-100 transition">Edit</button>
+                                <button onClick={() => handleDeleteChapter(subject.id, ch.id)} disabled={deleting === `chapter-${ch.id}`} className="px-2.5 py-1 rounded-lg text-red-500 text-xs font-semibold hover:bg-red-50 border border-gray-100 transition disabled:opacity-50">
+                                  {deleting === `chapter-${ch.id}` ? '…' : 'Delete'}
+                                </button>
+                              </div>
                             </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+
+                            {/* Inline Edit Chapter */}
+                            {editingChapterId === ch.id && (
+                              <div className="border-t border-gray-100 bg-indigo-50/30 px-4 py-3">
+                                <div className="flex flex-wrap items-end gap-3">
+                                  <div className="flex-1 min-w-[140px]">
+                                    <label className={LABEL_CLS}>Name</label>
+                                    <input value={editChapterForm.name} onChange={e => setEditChapterForm({ ...editChapterForm, name: e.target.value })} className={COMPACT_INPUT} />
+                                  </div>
+                                  <div className="flex-1 min-w-[100px]">
+                                    <label className={LABEL_CLS}>Code</label>
+                                    <input value={editChapterForm.code} onChange={e => setEditChapterForm({ ...editChapterForm, code: e.target.value.toUpperCase() })} className={COMPACT_INPUT} />
+                                  </div>
+                                  <div className="flex gap-2 self-end">
+                                    <button onClick={() => handleSaveChapter(subject.id, ch.id)} disabled={savingChapter} className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white text-xs font-semibold disabled:opacity-50">
+                                      {savingChapter ? 'Saving…' : 'Save'}
+                                    </button>
+                                    <button onClick={() => setEditingChapterId(null)} className="px-3 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-50">Cancel</button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

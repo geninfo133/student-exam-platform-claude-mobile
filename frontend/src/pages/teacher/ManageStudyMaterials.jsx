@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../../api/axios';
 
+const INPUT_CLS = 'w-full px-4 py-2.5 border-2 border-gray-100 rounded-xl focus:outline-none focus:border-indigo-400 transition bg-gray-50 text-sm';
+const LABEL_CLS = 'block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5';
+
 export default function ManageStudyMaterials() {
   const [subjects, setSubjects] = useState([]);
   const [chapters, setChapters] = useState([]);
@@ -11,8 +14,6 @@ export default function ManageStudyMaterials() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  // Form state
   const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ title: '', content: '', file: null, order: 0 });
@@ -23,22 +24,15 @@ export default function ManageStudyMaterials() {
     api.get('/api/assignments/my/').then(res => {
       const assignments = res.data.results || res.data;
       const subjectMap = {};
-      assignments.forEach(a => {
-        if (!subjectMap[a.subject]) {
-          subjectMap[a.subject] = { id: a.subject, name: a.subject_name };
-        }
-      });
+      assignments.forEach(a => { if (!subjectMap[a.subject]) subjectMap[a.subject] = { id: a.subject, name: a.subject_name }; });
       setSubjects(Object.values(subjectMap));
     });
   }, []);
 
   useEffect(() => {
     if (!selectedSubject) { setChapters([]); setSelectedChapter(''); return; }
-    api.get('/api/chapters/', { params: { subject: selectedSubject } }).then(res => {
-      setChapters(res.data.results || res.data);
-    });
-    setSelectedChapter('');
-    setMaterials([]);
+    api.get('/api/chapters/', { params: { subject: selectedSubject } }).then(res => setChapters(res.data.results || res.data));
+    setSelectedChapter(''); setMaterials([]);
   }, [selectedSubject]);
 
   useEffect(() => {
@@ -57,11 +51,7 @@ export default function ManageStudyMaterials() {
 
   const resetForm = () => {
     setForm({ title: '', content: '', file: null, order: 0 });
-    setKeyConcepts([]);
-    setEditingId(null);
-    setShowForm(false);
-    setError('');
-    setSuccess('');
+    setKeyConcepts([]); setEditingId(null); setShowForm(false); setError(''); setSuccess('');
     const fi = document.getElementById('material-file-input');
     if (fi) fi.value = '';
   };
@@ -69,340 +59,318 @@ export default function ManageStudyMaterials() {
   const startEdit = (mat) => {
     setEditingId(mat.id);
     setForm({ title: mat.title, content: mat.content || '', file: null, order: mat.order });
-    setKeyConcepts(
-      (mat.key_concepts || []).map(kc => ({
-        title: kc.title, description: kc.description, formula: kc.formula || '', order: kc.order,
-      }))
-    );
-    setShowForm(true);
-    setError('');
-    setSuccess('');
+    setKeyConcepts((mat.key_concepts || []).map(kc => ({ title: kc.title, description: kc.description, formula: kc.formula || '', order: kc.order })));
+    setShowForm(true); setError(''); setSuccess('');
   };
 
-  const addKeyConcept = () => {
-    setKeyConcepts([...keyConcepts, { title: '', description: '', formula: '', order: keyConcepts.length }]);
-  };
-
-  const removeKeyConcept = (idx) => {
-    setKeyConcepts(keyConcepts.filter((_, i) => i !== idx));
-  };
-
-  const updateKeyConcept = (idx, field, value) => {
-    setKeyConcepts(keyConcepts.map((kc, i) => i === idx ? { ...kc, [field]: value } : kc));
-  };
+  const addKeyConcept = () => setKeyConcepts([...keyConcepts, { title: '', description: '', formula: '', order: keyConcepts.length }]);
+  const removeKeyConcept = (idx) => setKeyConcepts(keyConcepts.filter((_, i) => i !== idx));
+  const updateKeyConcept = (idx, field, value) => setKeyConcepts(keyConcepts.map((kc, i) => i === idx ? { ...kc, [field]: value } : kc));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setSaving(true);
-    setError('');
-    setSuccess('');
-
+    setSaving(true); setError(''); setSuccess('');
     try {
-      const formData = new FormData();
-      formData.append('title', form.title);
-      formData.append('content', form.content);
-      formData.append('chapter', selectedChapter);
-      formData.append('order', form.order);
-      if (form.file) formData.append('file', form.file);
-      if (keyConcepts.length > 0) {
-        formData.append('key_concepts', JSON.stringify(keyConcepts));
-      }
+      const fd = new FormData();
+      fd.append('title', form.title);
+      fd.append('content', form.content);
+      fd.append('chapter', selectedChapter);
+      fd.append('order', form.order);
+      if (form.file) fd.append('file', form.file);
+      if (keyConcepts.length > 0) fd.append('key_concepts', JSON.stringify(keyConcepts));
 
       if (editingId) {
-        await api.patch(`/api/study-materials/${editingId}/update/`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await api.patch(`/api/study-materials/${editingId}/update/`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         setSuccess('Material updated successfully!');
       } else {
-        await api.post('/api/study-materials/create/', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await api.post('/api/study-materials/create/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
         setSuccess('Material created successfully!');
       }
-      resetForm();
-      fetchMaterials();
+      resetForm(); fetchMaterials();
     } catch (err) {
       const detail = err.response?.data;
       if (typeof detail === 'string') setError(detail);
       else if (detail?.non_field_errors) setError(detail.non_field_errors.join(', '));
       else if (detail?.detail) setError(detail.detail);
       else setError('Failed to save material.');
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const handleDelete = async (id) => {
     try {
       await api.delete(`/api/study-materials/${id}/delete/`);
-      setSuccess('Material deleted.');
-      setDeleteConfirm(null);
-      fetchMaterials();
-    } catch {
-      setError('Failed to delete material.');
-    }
+      setSuccess('Material deleted.'); setDeleteConfirm(null); fetchMaterials();
+    } catch { setError('Failed to delete material.'); }
   };
 
-  const getFileName = (url) => {
-    if (!url) return '';
-    return url.split('/').pop();
-  };
+  const getFileName = (url) => url ? url.split('/').pop() : '';
+
+  const chapterName = chapters.find(c => String(c.id) === String(selectedChapter))?.name || '';
+  const subjectName = subjects.find(s => String(s.id) === String(selectedSubject))?.name || '';
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">Manage Study Materials</h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Banner */}
+      <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 overflow-hidden">
+        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80')`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute top-10 right-20 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl" />
 
-      {/* Subject / Chapter selectors */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-          <select
-            value={selectedSubject}
-            onChange={e => setSelectedSubject(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          >
-            <option value="">Select Subject</option>
-            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Chapter</label>
-          <select
-            value={selectedChapter}
-            onChange={e => setSelectedChapter(e.target.value)}
-            disabled={!selectedSubject}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
-          >
-            <option value="">Select Chapter</option>
-            {chapters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+        <div className="relative max-w-7xl mx-auto px-4 py-12">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-emerald-300 text-sm font-medium uppercase tracking-wider">Teacher</p>
+              <h1 className="text-3xl font-bold text-white">Study Materials</h1>
+              {chapterName && <p className="text-indigo-200 text-sm mt-0.5">{subjectName} · {chapterName}</p>}
+            </div>
+          </div>
+
+          {/* Selectors */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <select
+              value={selectedSubject}
+              onChange={e => setSelectedSubject(e.target.value)}
+              className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:border-white/50 transition"
+            >
+              <option value="" className="text-gray-800">Select Subject</option>
+              {subjects.map(s => <option key={s.id} value={s.id} className="text-gray-800">{s.name}</option>)}
+            </select>
+            <select
+              value={selectedChapter}
+              onChange={e => setSelectedChapter(e.target.value)}
+              disabled={!selectedSubject}
+              className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-sm focus:outline-none focus:border-white/50 transition disabled:opacity-40"
+            >
+              <option value="" className="text-gray-800">Select Chapter</option>
+              {chapters.map(c => <option key={c.id} value={c.id} className="text-gray-800">{c.name}</option>)}
+            </select>
+          </div>
+
+          {selectedChapter && (
+            <div className="flex gap-3 mt-4">
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
+                <p className="text-2xl font-bold text-white">{materials.length}</p>
+                <p className="text-emerald-200 text-xs mt-0.5">Materials</p>
+              </div>
+              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
+                <p className="text-2xl font-bold text-white">{materials.reduce((s, m) => s + (m.key_concepts?.length || 0), 0)}</p>
+                <p className="text-emerald-200 text-xs mt-0.5">Key Concepts</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Messages */}
-      {error && <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg mb-4">{error}</div>}
-      {success && <div className="bg-green-50 text-green-700 px-4 py-3 rounded-lg mb-4">{success}</div>}
+      {/* Content */}
+      <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
+        {error && <div className="bg-red-50 border border-red-200 rounded-2xl p-4"><p className="text-red-700 text-sm">{error}</p></div>}
+        {success && <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4"><p className="text-emerald-800 font-semibold text-sm">{success}</p></div>}
 
-      {/* Material list */}
-      {selectedChapter && (
-        <>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-700">
-              Materials {materials.length > 0 && `(${materials.length})`}
-            </h2>
-            {!showForm && (
-              <button
-                onClick={() => { resetForm(); setShowForm(true); }}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition text-sm font-medium"
-              >
-                + Add Material
-              </button>
-            )}
-          </div>
-
-          {loading ? (
-            <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
+        {!selectedChapter ? (
+          <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
+            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
             </div>
-          ) : (
-            <>
-              {/* Create / Edit Form */}
-              {showForm && (
-                <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
-                  <h3 className="font-semibold text-gray-800 mb-4">
-                    {editingId ? 'Edit Material' : 'New Material'}
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                      <input
-                        type="text"
-                        required
-                        value={form.title}
-                        onChange={e => setForm({ ...form, title: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Content</label>
-                      <textarea
-                        rows={6}
-                        value={form.content}
-                        onChange={e => setForm({ ...form, content: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="Enter study material content..."
-                      />
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">File (PDF, images, docs)</label>
-                        <input
-                          type="file"
-                          id="material-file-input"
-                          accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-                          onChange={e => setForm({ ...form, file: e.target.files[0] || null })}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Order</label>
-                        <input
-                          type="number"
-                          value={form.order}
-                          onChange={e => setForm({ ...form, order: parseInt(e.target.value) || 0 })}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                      </div>
-                    </div>
+            <h3 className="text-lg font-semibold text-gray-700 mb-1">Select a subject and chapter</h3>
+            <p className="text-gray-400 text-sm">Use the dropdowns above to choose a chapter and manage its study materials.</p>
+          </div>
+        ) : loading ? (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent" />
+          </div>
+        ) : (
+          <>
+            {/* Add Material button */}
+            {!showForm && (
+              <div className="flex justify-end">
+                <button
+                  onClick={() => { resetForm(); setShowForm(true); }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-semibold rounded-xl text-sm transition-all shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Material
+                </button>
+              </div>
+            )}
 
-                    {/* Key Concepts */}
+            {/* Create / Edit Form */}
+            {showForm && (
+              <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div className={`bg-gradient-to-r ${editingId ? 'from-amber-500 to-orange-500' : 'from-emerald-500 to-teal-600'} px-5 py-4 flex items-center justify-between`}>
+                  <p className="font-semibold text-white text-sm">{editingId ? 'Edit Material' : 'New Material'}</p>
+                  <button type="button" onClick={resetForm} className="text-white/70 hover:text-white transition">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className={LABEL_CLS}>Title *</label>
+                    <input type="text" required value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className={INPUT_CLS} placeholder="Material title" />
+                  </div>
+                  <div>
+                    <label className={LABEL_CLS}>Content</label>
+                    <textarea rows={5} value={form.content} onChange={e => setForm({ ...form, content: e.target.value })}
+                      className={INPUT_CLS + ' resize-none'} placeholder="Enter study material content…" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <div className="flex justify-between items-center mb-2">
-                        <label className="text-sm font-medium text-gray-700">Key Concepts</label>
-                        <button
-                          type="button"
-                          onClick={addKeyConcept}
-                          className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
-                        >
-                          + Add Concept
-                        </button>
-                      </div>
+                      <label className={LABEL_CLS}>File <span className="text-gray-400 font-normal normal-case">(PDF, images, docs)</span></label>
+                      <label className="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl px-4 py-3 cursor-pointer hover:bg-gray-50 hover:border-indigo-300 transition">
+                        <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
+                        </svg>
+                        <span className="text-sm text-gray-500 truncate">{form.file ? form.file.name : 'Click to attach file'}</span>
+                        <input id="material-file-input" type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg" onChange={e => setForm({ ...form, file: e.target.files[0] || null })} className="hidden" />
+                      </label>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Display Order</label>
+                      <input type="number" value={form.order} onChange={e => setForm({ ...form, order: parseInt(e.target.value) || 0 })} className={INPUT_CLS} />
+                    </div>
+                  </div>
+
+                  {/* Key Concepts */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <label className={LABEL_CLS + ' mb-0'}>Key Concepts</label>
+                      <button type="button" onClick={addKeyConcept}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add Concept
+                      </button>
+                    </div>
+                    <div className="space-y-3">
                       {keyConcepts.map((kc, idx) => (
-                        <div key={idx} className="bg-gray-50 rounded-lg p-4 mb-3 border border-gray-200">
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="text-xs font-semibold text-gray-500">Concept {idx + 1}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeKeyConcept(idx)}
-                              className="text-red-500 hover:text-red-700 text-xs"
-                            >
-                              Remove
+                        <div key={idx} className="bg-indigo-50 rounded-xl p-4 border border-indigo-100">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs font-bold text-indigo-600">Concept {idx + 1}</span>
+                            <button type="button" onClick={() => removeKeyConcept(idx)} className="text-red-400 hover:text-red-600 transition">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
                             </button>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <input
-                              type="text"
-                              placeholder="Title"
-                              required
-                              value={kc.title}
-                              onChange={e => updateKeyConcept(idx, 'title', e.target.value)}
-                              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                            />
-                            <input
-                              type="text"
-                              placeholder="Formula (optional)"
-                              value={kc.formula}
-                              onChange={e => updateKeyConcept(idx, 'formula', e.target.value)}
-                              className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                            />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
+                            <input type="text" placeholder="Title *" required value={kc.title} onChange={e => updateKeyConcept(idx, 'title', e.target.value)}
+                              className="px-3 py-2 border-2 border-indigo-100 rounded-xl bg-white text-sm focus:outline-none focus:border-indigo-400 transition" />
+                            <input type="text" placeholder="Formula (optional)" value={kc.formula} onChange={e => updateKeyConcept(idx, 'formula', e.target.value)}
+                              className="px-3 py-2 border-2 border-indigo-100 rounded-xl bg-white text-sm font-mono focus:outline-none focus:border-indigo-400 transition" />
                           </div>
-                          <textarea
-                            placeholder="Description"
-                            required
-                            rows={2}
-                            value={kc.description}
-                            onChange={e => updateKeyConcept(idx, 'description', e.target.value)}
-                            className="w-full mt-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                          />
+                          <textarea placeholder="Description *" required rows={2} value={kc.description} onChange={e => updateKeyConcept(idx, 'description', e.target.value)}
+                            className="w-full px-3 py-2 border-2 border-indigo-100 rounded-xl bg-white text-sm resize-none focus:outline-none focus:border-indigo-400 transition" />
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="flex gap-3 mt-6">
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      className="bg-indigo-600 text-white px-6 py-2.5 rounded-lg hover:bg-indigo-700 transition font-medium text-sm disabled:opacity-50"
-                    >
-                      {saving ? (editingId ? 'Updating...' : 'Creating...') : (editingId ? 'Update Material' : 'Create Material')}
+                  <div className="flex gap-3 pt-2">
+                    <button type="submit" disabled={saving}
+                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold text-sm transition-all disabled:opacity-50 shadow-sm">
+                      {saving ? (editingId ? 'Updating…' : 'Creating…') : (editingId ? 'Update Material' : 'Create Material')}
                     </button>
-                    <button
-                      type="button"
-                      onClick={resetForm}
-                      className="bg-gray-100 text-gray-700 px-6 py-2.5 rounded-lg hover:bg-gray-200 transition font-medium text-sm"
-                    >
+                    <button type="button" onClick={resetForm}
+                      className="px-5 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm hover:border-gray-300 hover:bg-gray-50 transition">
                       Cancel
                     </button>
                   </div>
-                </form>
-              )}
-
-              {/* Materials cards */}
-              {materials.length === 0 && !showForm ? (
-                <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
-                  <p className="text-gray-500">No materials for this chapter yet.</p>
                 </div>
-              ) : (
-                materials.map(mat => (
-                  <div key={mat.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-gray-800 text-lg">{mat.title}</h3>
-                        {mat.content && (
-                          <p className="text-gray-600 text-sm mt-1 line-clamp-2">{mat.content}</p>
-                        )}
-                        <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
-                          {mat.file && (
-                            <a
-                              href={mat.file}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-indigo-600 hover:underline flex items-center gap-1"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              {getFileName(mat.file)}
-                            </a>
-                          )}
-                          <span>Order: {mat.order}</span>
-                          {mat.key_concepts?.length > 0 && (
-                            <span>{mat.key_concepts.length} key concept{mat.key_concepts.length !== 1 ? 's' : ''}</span>
-                          )}
-                          {mat.uploaded_by_name && <span>By: {mat.uploaded_by_name}</span>}
-                          {!mat.is_active && <span className="text-red-500 font-medium">Inactive</span>}
-                        </div>
+              </form>
+            )}
+
+            {/* Materials list */}
+            {materials.length === 0 && !showForm ? (
+              <div className="bg-white rounded-2xl p-12 text-center shadow-sm border border-gray-100">
+                <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-700 mb-1">No materials yet</h3>
+                <p className="text-gray-400 text-sm">Add the first study material for this chapter.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {materials.map((mat, idx) => (
+                  <div key={mat.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div className="flex items-stretch">
+                      {/* Order strip */}
+                      <div className="w-12 bg-gradient-to-b from-emerald-500 to-teal-600 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white text-xs font-bold">{mat.order || idx + 1}</span>
                       </div>
-                      <div className="flex gap-2 ml-4">
-                        <button
-                          onClick={() => startEdit(mat)}
-                          className="text-indigo-600 hover:text-indigo-800 text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition"
-                        >
-                          Edit
-                        </button>
-                        {deleteConfirm === mat.id ? (
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => handleDelete(mat.id)}
-                              className="text-red-600 hover:text-red-800 text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition"
-                            >
-                              Confirm
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirm(null)}
-                              className="text-gray-500 hover:text-gray-700 text-sm px-2 py-1.5"
-                            >
-                              Cancel
-                            </button>
+                      <div className="flex-1 p-5">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <h3 className="font-semibold text-gray-800">{mat.title}</h3>
+                              {!mat.is_active && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">Inactive</span>}
+                            </div>
+                            {mat.content && <p className="text-gray-500 text-sm line-clamp-2 mb-2">{mat.content}</p>}
+                            <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+                              {mat.file && (
+                                <a href={mat.file} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 font-medium transition">
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  {getFileName(mat.file)}
+                                </a>
+                              )}
+                              {mat.key_concepts?.length > 0 && (
+                                <span className="inline-flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                                  {mat.key_concepts.length} concept{mat.key_concepts.length !== 1 ? 's' : ''}
+                                </span>
+                              )}
+                              {mat.uploaded_by_name && <span>By {mat.uploaded_by_name}</span>}
+                            </div>
                           </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeleteConfirm(mat.id)}
-                            className="text-red-500 hover:text-red-700 text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-red-50 transition"
-                          >
-                            Delete
-                          </button>
-                        )}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button onClick={() => startEdit(mat)}
+                              className="px-3 py-1.5 rounded-xl text-indigo-600 text-sm font-semibold hover:bg-indigo-50 border-2 border-indigo-100 hover:border-indigo-200 transition">
+                              Edit
+                            </button>
+                            {deleteConfirm === mat.id ? (
+                              <div className="flex gap-1">
+                                <button onClick={() => handleDelete(mat.id)}
+                                  className="px-3 py-1.5 rounded-xl text-red-600 text-sm font-semibold hover:bg-red-50 border-2 border-red-100 transition">
+                                  Confirm
+                                </button>
+                                <button onClick={() => setDeleteConfirm(null)}
+                                  className="px-2 py-1.5 rounded-xl text-gray-500 text-sm hover:bg-gray-50 border-2 border-gray-100 transition">
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setDeleteConfirm(mat.id)}
+                                className="p-1.5 rounded-xl text-red-400 hover:text-red-600 hover:bg-red-50 border-2 border-gray-100 hover:border-red-200 transition">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))
-              )}
-            </>
-          )}
-        </>
-      )}
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

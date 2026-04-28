@@ -5,6 +5,59 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer,
 } from 'recharts';
 
+function gradeBadge(pct) {
+  if (pct >= 90) return { label: 'A+', cls: 'bg-emerald-100 text-emerald-700 border-emerald-200', ring: '#10b981' };
+  if (pct >= 75) return { label: 'A',  cls: 'bg-green-100 text-green-700 border-green-200',     ring: '#22c55e' };
+  if (pct >= 60) return { label: 'B',  cls: 'bg-blue-100 text-blue-700 border-blue-200',        ring: '#3b82f6' };
+  if (pct >= 50) return { label: 'C',  cls: 'bg-yellow-100 text-yellow-700 border-yellow-200',  ring: '#eab308' };
+  if (pct >= 35) return { label: 'D',  cls: 'bg-orange-100 text-orange-700 border-orange-200',  ring: '#f97316' };
+  return               { label: 'F',  cls: 'bg-red-100 text-red-700 border-red-200',            ring: '#ef4444' };
+}
+
+function ScoreRing({ pct, size = 80 }) {
+  const grade = gradeBadge(pct);
+  const r = 34; const circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
+  return (
+    <svg width={size} height={size} viewBox="0 0 80 80">
+      <circle cx="40" cy="40" r={r} fill="none" stroke="#e5e7eb" strokeWidth="8" />
+      <circle cx="40" cy="40" r={r} fill="none" stroke={grade.ring} strokeWidth="8"
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        transform="rotate(-90 40 40)" />
+      <text x="40" y="37" textAnchor="middle" dominantBaseline="middle"
+        fill="#1e293b" fontSize="13" fontWeight="800">{pct}%</text>
+      <text x="40" y="52" textAnchor="middle" dominantBaseline="middle"
+        fill="#94a3b8" fontSize="9">{grade.label}</text>
+    </svg>
+  );
+}
+
+function InsightCard({ icon, title, items, bg, border, iconBg, textCls }) {
+  if (!items?.length) return null;
+  return (
+    <div className={`${bg} ${border} border-2 rounded-2xl p-4`}>
+      <div className="flex items-center gap-2 mb-3">
+        <div className={`w-7 h-7 ${iconBg} rounded-lg flex items-center justify-center text-sm shrink-0`}>{icon}</div>
+        <p className={`text-sm font-bold ${textCls}`}>{title}</p>
+      </div>
+      <ul className="space-y-1.5">
+        {items.map((s, i) => (
+          <li key={i} className={`text-xs ${textCls} opacity-90 flex items-start gap-1.5`}>
+            <span className="mt-0.5 shrink-0">•</span>{s}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function getMarkColor(awarded, max) {
+  const r = max > 0 ? awarded / max : 0;
+  if (r >= 0.8) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+  if (r >= 0.5) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+  return 'bg-red-100 text-red-700 border-red-200';
+}
+
 export default function HandwrittenResults() {
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,216 +70,285 @@ export default function HandwrittenResults() {
       .finally(() => setLoading(false));
   }, []);
 
-  const getScoreColor = (pct) => {
-    if (pct >= 80) return 'text-green-600 bg-green-50 border-green-200';
-    if (pct >= 60) return 'text-blue-600 bg-blue-50 border-blue-200';
-    if (pct >= 40) return 'text-yellow-600 bg-yellow-50 border-yellow-200';
-    return 'text-red-600 bg-red-50 border-red-200';
-  };
-
-  const getMarkColor = (awarded, max) => {
-    const ratio = max > 0 ? awarded / max : 0;
-    if (ratio >= 0.8) return 'bg-green-100 text-green-700';
-    if (ratio >= 0.5) return 'bg-yellow-100 text-yellow-700';
-    return 'bg-red-100 text-red-700';
-  };
+  const gradedExams = exams.filter(e => e.obtained_marks != null);
+  const avgPct = gradedExams.length
+    ? Math.round(gradedExams.reduce((s, e) => s + (e.percentage || 0), 0) / gradedExams.length)
+    : 0;
 
   if (loading) {
     return (
-      <div className="flex justify-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-3">
+        <div className="w-12 h-12 rounded-full border-4 border-indigo-200 border-t-indigo-600 animate-spin" />
+        <p className="text-gray-400 text-sm font-medium">Loading results…</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-800">Handwritten Exam Results</h1>
-        <p className="text-gray-500 text-sm mt-1">View your graded handwritten answer sheets</p>
+    <div className="min-h-screen bg-slate-50">
+
+      {/* ── BANNER ── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950">
+        <img
+          src="https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover opacity-10"
+        />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
+
+        <div className="relative max-w-4xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">My Results</p>
+          <h1 className="text-3xl font-extrabold text-white mb-1">Handwritten Results</h1>
+          <p className="text-indigo-200 text-sm mb-6">AI-graded handwritten answer sheets</p>
+
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Total Sheets',  value: exams.length,       color: 'bg-white/10 border-white/20',             text: 'text-white'       },
+              { label: 'Graded',        value: gradedExams.length,  color: 'bg-emerald-500/20 border-emerald-400/30', text: 'text-emerald-200' },
+              { label: 'Pending',       value: exams.length - gradedExams.length, color: 'bg-amber-500/20 border-amber-400/30', text: 'text-amber-200' },
+              { label: 'Avg Score',     value: `${avgPct}%`,        color: 'bg-indigo-500/30 border-indigo-400/40',   text: 'text-indigo-200'  },
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {exams.length === 0 ? (
-        <div className="bg-white rounded-xl p-12 text-center shadow-sm border border-gray-100">
-          <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <p className="text-gray-500">No graded handwritten exams yet.</p>
-          <p className="text-gray-400 text-sm mt-1">Your teacher will upload and grade your answer sheets here.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {exams.map((exam) => {
-            const pct = exam.percentage || 0;
-            const isExpanded = expanded === exam.id;
-            const grading = exam.grading_data || {};
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        {exams.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-violet-100 to-purple-100 rounded-2xl
+                            flex items-center justify-center mx-auto mb-5">
+              <svg className="w-10 h-10 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <p className="text-gray-700 font-bold text-lg">No Graded Sheets Yet</p>
+            <p className="text-gray-400 text-sm mt-2 max-w-sm mx-auto">
+              Your teacher will upload and grade your handwritten answer sheets. Check back later.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {exams.map((exam) => {
+              const pct       = Math.round(exam.percentage || 0);
+              const grade     = gradeBadge(pct);
+              const isExpanded = expanded === exam.id;
+              const grading   = exam.grading_data || {};
+              const pieColor  = pct >= 60 ? '#4f46e5' : pct >= 40 ? '#f59e0b' : '#ef4444';
 
-            return (
-              <div key={exam.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                {/* Header */}
-                <div
-                  className="flex items-center justify-between p-5 cursor-pointer hover:bg-gray-50 transition"
-                  onClick={() => setExpanded(isExpanded ? null : exam.id)}
-                >
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-800">{exam.title}</h3>
-                    <div className="flex flex-wrap gap-2 mt-1">
-                      <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded">{exam.subject_name}</span>
-                      <span className="text-xs text-gray-400">{new Date(exam.created_at).toLocaleDateString()}</span>
+              return (
+                <div key={exam.id}
+                  className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+
+                  {/* ── Card Header ── */}
+                  <div
+                    className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-slate-50/60 transition"
+                    onClick={() => setExpanded(isExpanded ? null : exam.id)}
+                  >
+                    {/* Score ring */}
+                    <div className="shrink-0">
+                      <ScoreRing pct={pct} size={72} />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className={`px-4 py-2 rounded-lg border font-bold text-lg ${getScoreColor(pct)}`}>
-                      {exam.obtained_marks}/{exam.total_marks}
-                      <span className="text-xs font-normal ml-1">({pct.toFixed(1)}%)</span>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 className="font-bold text-gray-800 text-base">{exam.title}</h3>
+                        <span className="inline-block text-xs font-bold px-2.5 py-0.5 rounded-full
+                                         bg-violet-100 text-violet-700 border border-violet-200">✍️ Handwritten</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        <span className="text-xs font-semibold bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg border border-indigo-100">
+                          📚 {exam.subject_name}
+                        </span>
+                        {exam.obtained_marks != null && (
+                          <span className="text-xs font-semibold bg-slate-50 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-100">
+                            🏆 {exam.obtained_marks}/{exam.total_marks} marks
+                          </span>
+                        )}
+                        <span className="text-xs font-semibold bg-slate-50 text-slate-500 px-2.5 py-1 rounded-lg border border-slate-100">
+                          📅 {new Date(exam.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+
+                      {/* Score bar */}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden max-w-xs">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${Math.min(pct, 100)}%`,
+                              background: `linear-gradient(to right, ${pieColor}, ${pieColor}cc)`,
+                            }}
+                          />
+                        </div>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-lg border ${grade.cls}`}>{grade.label}</span>
+                      </div>
                     </div>
-                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+                    <svg className={`w-5 h-5 text-gray-400 transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </div>
-                </div>
 
-                {/* Expanded Details */}
-                {isExpanded && (
-                  <div className="border-t border-gray-100 p-5 bg-gray-50 space-y-5">
-                    {/* Score Summary */}
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-white rounded-lg p-4 text-center border">
-                        <p className="text-2xl font-bold text-indigo-600">{exam.obtained_marks}</p>
-                        <p className="text-xs text-gray-500 mt-1">Obtained</p>
-                      </div>
-                      <div className="bg-white rounded-lg p-4 text-center border">
-                        <p className="text-2xl font-bold text-gray-700">{exam.total_marks}</p>
-                        <p className="text-xs text-gray-500 mt-1">Total</p>
-                      </div>
-                      <div className="bg-white rounded-lg p-4 text-center border">
-                        <p className={`text-2xl font-bold ${pct >= 60 ? 'text-green-600' : pct >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>
-                          {pct.toFixed(1)}%
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">Percentage</p>
-                      </div>
-                    </div>
+                  {/* ── Expanded Panel ── */}
+                  {isExpanded && (
+                    <div className="border-t border-gray-100 bg-gradient-to-br from-indigo-50/60 via-violet-50/40 to-slate-50 p-5 space-y-5">
 
-                    {/* Charts */}
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {/* Score donut */}
-                      <div className="bg-white rounded-xl border border-gray-200 p-4">
-                        <h4 className="text-sm font-semibold text-gray-700 mb-2">Score Overview</h4>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <PieChart>
-                            <Pie
-                              data={[
-                                { name: 'Scored', value: exam.obtained_marks },
-                                { name: 'Lost', value: Math.max(0, exam.total_marks - exam.obtained_marks) },
-                              ]}
-                              cx="50%" cy="50%"
-                              innerRadius={50} outerRadius={72}
-                              dataKey="value"
-                              startAngle={90} endAngle={-270}
-                            >
-                              <Cell fill={pct >= 60 ? '#16a34a' : pct >= 40 ? '#ca8a04' : '#dc2626'} />
-                              <Cell fill="#e5e7eb" />
-                            </Pie>
-                            <Tooltip formatter={(v, n) => [`${v} marks`, n]} />
-                            <Legend />
-                          </PieChart>
-                        </ResponsiveContainer>
+                      {/* Score summary cards */}
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'Obtained', value: exam.obtained_marks ?? '—', grad: 'from-indigo-500 to-violet-600' },
+                          { label: 'Total',    value: exam.total_marks    ?? '—', grad: 'from-slate-500 to-slate-700'   },
+                          { label: 'Score',    value: `${pct}%`,                  grad: pct >= 60 ? 'from-emerald-500 to-teal-600' : pct >= 40 ? 'from-amber-500 to-orange-500' : 'from-red-500 to-rose-600' },
+                        ].map(({ label, value, grad }) => (
+                          <div key={label} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 text-center">
+                            <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center mx-auto mb-2`}>
+                              <span className="text-white text-xs font-bold">{label[0]}</span>
+                            </div>
+                            <p className="text-2xl font-extrabold text-gray-800">{value}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+                          </div>
+                        ))}
                       </div>
 
-                      {/* Per-question bar */}
-                      {grading.questions?.length > 0 && (
-                        <div className="bg-white rounded-xl border border-gray-200 p-4">
-                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Question-wise Marks</h4>
+                      {/* Charts */}
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Score Overview</p>
                           <ResponsiveContainer width="100%" height={180}>
-                            <BarChart
-                              data={grading.questions.map(q => ({
-                                name: `Q${q.question_number}`,
-                                Scored: q.marks_awarded,
-                                Max: q.max_marks,
-                              }))}
-                              margin={{ top: 0, right: 5, left: -20, bottom: 0 }}
-                            >
-                              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                              <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                              <YAxis tick={{ fontSize: 10 }} />
-                              <Tooltip />
-                              <Legend wrapperStyle={{ fontSize: 10 }} />
-                              <Bar dataKey="Max" fill="#e0e7ff" radius={[3,3,0,0]} />
-                              <Bar dataKey="Scored" fill="#4f46e5" radius={[3,3,0,0]} />
-                            </BarChart>
+                            <PieChart>
+                              <Pie
+                                data={[
+                                  { name: 'Scored', value: exam.obtained_marks || 0 },
+                                  { name: 'Lost',   value: Math.max(0, (exam.total_marks || 0) - (exam.obtained_marks || 0)) },
+                                ]}
+                                cx="50%" cy="50%" innerRadius={50} outerRadius={72}
+                                dataKey="value" startAngle={90} endAngle={-270}
+                              >
+                                <Cell fill={pieColor} />
+                                <Cell fill="#e5e7eb" />
+                              </Pie>
+                              <Tooltip formatter={(v, n) => [`${v} marks`, n]} />
+                              <Legend wrapperStyle={{ fontSize: 11 }} />
+                            </PieChart>
                           </ResponsiveContainer>
+                        </div>
+
+                        {grading.questions?.length > 0 && (
+                          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Question-wise Marks</p>
+                            <ResponsiveContainer width="100%" height={180}>
+                              <BarChart
+                                data={grading.questions.map(q => ({
+                                  name: `Q${q.question_number}`,
+                                  Scored: q.marks_awarded,
+                                  Max: q.max_marks,
+                                }))}
+                                margin={{ top: 0, right: 5, left: -20, bottom: 0 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                                <YAxis tick={{ fontSize: 10 }} />
+                                <Tooltip />
+                                <Legend wrapperStyle={{ fontSize: 10 }} />
+                                <Bar dataKey="Max"    fill="#e0e7ff" radius={[4,4,0,0]} />
+                                <Bar dataKey="Scored" fill="#4f46e5" radius={[4,4,0,0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Overall Feedback */}
+                      {grading.overall_feedback && (
+                        <div className="bg-indigo-50 border-2 border-indigo-100 rounded-2xl p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-7 h-7 bg-indigo-100 rounded-lg flex items-center justify-center text-sm">💬</div>
+                            <p className="text-sm font-bold text-indigo-800">Overall Feedback</p>
+                          </div>
+                          <p className="text-sm text-indigo-700 leading-relaxed">{grading.overall_feedback}</p>
+                        </div>
+                      )}
+
+                      {/* Insight cards */}
+                      <div className="grid md:grid-cols-3 gap-3">
+                        <InsightCard
+                          icon="💪" title="Strengths"
+                          items={grading.strengths}
+                          bg="bg-emerald-50" border="border-emerald-100"
+                          iconBg="bg-emerald-100" textCls="text-emerald-800"
+                        />
+                        <InsightCard
+                          icon="📈" title="Areas to Improve"
+                          items={grading.weaknesses}
+                          bg="bg-red-50" border="border-red-100"
+                          iconBg="bg-red-100" textCls="text-red-800"
+                        />
+                        <InsightCard
+                          icon="🎯" title="Recommendations"
+                          items={grading.recommendations}
+                          bg="bg-blue-50" border="border-blue-100"
+                          iconBg="bg-blue-100" textCls="text-blue-800"
+                        />
+                      </div>
+
+                      {/* Per-question breakdown */}
+                      {grading.questions?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Question Breakdown</p>
+                          <div className="space-y-3">
+                            {grading.questions.map((q, i) => {
+                              const markCls = getMarkColor(q.marks_awarded, q.max_marks);
+                              return (
+                                <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                                  <div className="flex items-start justify-between gap-3 mb-2">
+                                    <div className="flex items-start gap-2">
+                                      <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                        {q.question_number}
+                                      </span>
+                                      <p className="text-sm font-semibold text-gray-800">{q.question_text}</p>
+                                    </div>
+                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-lg border shrink-0 ${markCls}`}>
+                                      {q.marks_awarded}/{q.max_marks}
+                                    </span>
+                                  </div>
+                                  {q.student_answer && (
+                                    <p className="text-xs text-gray-500 mb-1">
+                                      <span className="font-semibold text-gray-600">Your Answer:</span> {q.student_answer}
+                                    </p>
+                                  )}
+                                  {q.correct_answer && (
+                                    <p className="text-xs text-gray-500 mb-1">
+                                      <span className="font-semibold text-gray-600">Expected:</span> {q.correct_answer}
+                                    </p>
+                                  )}
+                                  {q.feedback && (
+                                    <p className="text-xs text-indigo-600 mt-1.5 font-medium">{q.feedback}</p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
-
-                    {/* Overall Feedback */}
-                    {grading.overall_feedback && (
-                      <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                        <p className="text-sm font-medium text-indigo-800 mb-1">Overall Feedback</p>
-                        <p className="text-sm text-indigo-700">{grading.overall_feedback}</p>
-                      </div>
-                    )}
-
-                    {/* Strengths / Weaknesses / Recommendations */}
-                    {grading.strengths?.length > 0 && (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                        <p className="text-sm font-medium text-green-800 mb-2">Strengths</p>
-                        <ul className="list-disc list-inside text-sm text-green-700 space-y-1">
-                          {grading.strengths.map((s, i) => <li key={i}>{s}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {grading.weaknesses?.length > 0 && (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <p className="text-sm font-medium text-red-800 mb-2">Areas to Improve</p>
-                        <ul className="list-disc list-inside text-sm text-red-700 space-y-1">
-                          {grading.weaknesses.map((w, i) => <li key={i}>{w}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {grading.recommendations?.length > 0 && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                        <p className="text-sm font-medium text-blue-800 mb-2">Recommendations</p>
-                        <ul className="list-disc list-inside text-sm text-blue-700 space-y-1">
-                          {grading.recommendations.map((r, i) => <li key={i}>{r}</li>)}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Per-Question Breakdown */}
-                    {grading.questions?.length > 0 && (
-                      <div>
-                        <p className="text-sm font-semibold text-gray-700 mb-3">Question-wise Breakdown</p>
-                        <div className="space-y-3">
-                          {grading.questions.map((q, i) => (
-                            <div key={i} className="bg-white rounded-lg border p-4">
-                              <div className="flex justify-between items-start mb-2">
-                                <p className="text-sm font-medium text-gray-800">Q{q.question_number}. {q.question_text}</p>
-                                <span className={`text-xs font-bold px-2 py-1 rounded ${getMarkColor(q.marks_awarded, q.max_marks)}`}>
-                                  {q.marks_awarded}/{q.max_marks}
-                                </span>
-                              </div>
-                              {q.student_answer && (
-                                <p className="text-xs text-gray-600 mb-1"><span className="font-medium">Your Answer:</span> {q.student_answer}</p>
-                              )}
-                              {q.correct_answer && (
-                                <p className="text-xs text-gray-600 mb-1"><span className="font-medium">Expected:</span> {q.correct_answer}</p>
-                              )}
-                              {q.feedback && (
-                                <p className="text-xs text-indigo-600 mt-1">{q.feedback}</p>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

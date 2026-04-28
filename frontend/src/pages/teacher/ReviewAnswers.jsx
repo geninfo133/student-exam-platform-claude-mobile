@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../../api/axios';
-import Avatar from '../../components/Common/Avatar';
 
 export default function ReviewAnswers() {
   const { examId } = useParams();
@@ -19,7 +18,6 @@ export default function ReviewAnswers() {
       try {
         const res = await api.get(`/api/exams/review/${examId}/`);
         setExam(res.data);
-        // Initialize review data from existing teacher scores
         const initial = {};
         (res.data.answers || []).forEach((ans) => {
           if (ans.teacher_score !== null || ans.teacher_feedback) {
@@ -40,21 +38,13 @@ export default function ReviewAnswers() {
   }, [examId]);
 
   const handleReviewChange = (answerId, field, value) => {
-    setReviewData((prev) => ({
-      ...prev,
-      [answerId]: {
-        ...prev[answerId],
-        [field]: value,
-      },
-    }));
-    // Clear saved indicator when user edits
+    setReviewData((prev) => ({ ...prev, [answerId]: { ...prev[answerId], [field]: value } }));
     setSaved((prev) => ({ ...prev, [answerId]: false }));
   };
 
   const handleSave = async (answerId) => {
     const data = reviewData[answerId];
     if (!data) return;
-
     setSaving((prev) => ({ ...prev, [answerId]: true }));
     try {
       await api.patch(`/api/exams/review/${examId}/`, {
@@ -75,7 +65,6 @@ export default function ReviewAnswers() {
     try {
       await api.post(`/api/exams/${examId}/analyze/`);
       setAnalysisDone(true);
-      // Refetch to get updated analysis
       const res = await api.get(`/api/exams/review/${examId}/`);
       setExam(res.data);
     } catch (err) {
@@ -87,19 +76,21 @@ export default function ReviewAnswers() {
 
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center min-h-[60vh]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-        <p className="text-gray-500">Loading review...</p>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent" />
+          <p className="text-slate-400 text-sm">Loading review…</p>
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !exam) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-          <p className="text-red-700">{error}</p>
-          <Link to="/teacher/created-exams" className="text-indigo-600 font-medium hover:underline mt-2 inline-block">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100 max-w-sm">
+          <p className="text-red-600 mb-4">{error || 'Exam not found'}</p>
+          <Link to="/teacher/created-exams" className="text-indigo-600 font-medium hover:underline text-sm">
             Back to Created Exams
           </Link>
         </div>
@@ -107,290 +98,302 @@ export default function ReviewAnswers() {
     );
   }
 
-  if (!exam) return <div className="text-center py-12 text-gray-500">Exam not found</div>;
-
   const answers = exam.answers || [];
-  const descriptiveAnswers = answers.filter(
-    (ans) => ans.question?.question_type === 'SHORT' || ans.question?.question_type === 'LONG'
-  );
+  const backTo = exam.assigned_exam_id
+    ? `/teacher/exam/${exam.assigned_exam_id}/submissions`
+    : '/teacher/created-exams';
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6">
-        <Link
-          to={exam.assigned_exam_id ? `/teacher/exam/${exam.assigned_exam_id}/submissions` : '/teacher/created-exams'}
-          className="text-gray-400 hover:text-gray-600 transition"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </Link>
-        <div className="flex items-center gap-3">
-          <Avatar src={exam.profile_photo} name={exam.student_name || exam.student_username} />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">{exam.title || 'Review Answers'}</h1>
-            <p className="text-sm text-gray-500">
-              Student: {exam.student_name || exam.student_username} | {exam.subject_name || ''}
-            </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Banner */}
+      <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 overflow-hidden">
+        <div
+          className="absolute inset-0 opacity-10"
+          style={{
+            backgroundImage: `url('https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80')`,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }}
+        />
+        <div className="absolute top-10 right-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl" />
+
+        <div className="relative max-w-7xl mx-auto px-4 py-12">
+          <Link to={backTo} className="inline-flex items-center gap-2 text-indigo-300 hover:text-white text-sm mb-6 transition-colors">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Submissions
+          </Link>
+
+          <div className="flex items-start gap-4 mb-8">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-indigo-300 text-sm font-medium">
+                {exam.student_name || exam.student_username} · {exam.subject_name}
+              </p>
+              <h1 className="text-2xl font-bold text-white">{exam.title || 'Review Answers'}</h1>
+            </div>
+          </div>
+
+          {/* Score tiles */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Score', value: exam.score ?? '—' },
+              { label: 'Total Marks', value: exam.total_marks ?? '—' },
+              { label: 'Percentage', value: exam.percentage != null ? `${Math.round(exam.percentage)}%` : '—' },
+              { label: 'Answers', value: answers.length },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-center border border-white/10">
+                <p className="text-2xl font-bold text-white">{value}</p>
+                <p className="text-indigo-200 text-xs mt-0.5">{label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Summary Card */}
-      <div className="bg-gradient-to-r from-gray-900 to-indigo-600 rounded-2xl p-6 text-white mb-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="text-center">
-            <p className="text-2xl font-bold">{exam.score ?? '-'}</p>
-            <p className="text-sm text-indigo-100">Score</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold">{exam.total_marks ?? '-'}</p>
-            <p className="text-sm text-indigo-100">Total Marks</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold">{exam.percentage != null ? `${Math.round(exam.percentage)}%` : '-'}</p>
-            <p className="text-sm text-indigo-100">Percentage</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold">{answers.length}</p>
-            <p className="text-sm text-indigo-100">Total Answers</p>
-          </div>
-        </div>
-      </div>
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
 
-      {/* Analysis Section */}
-      {exam.analysis ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4">Analysis</h2>
-          <div className="grid md:grid-cols-3 gap-4">
-            {exam.analysis.strengths?.length > 0 && (
-              <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-                <h3 className="text-sm font-semibold text-green-700 mb-2">Strengths</h3>
-                <ul className="text-sm text-green-800 space-y-1">
-                  {exam.analysis.strengths.map((s, i) => <li key={i}>- {s}</li>)}
-                </ul>
+        {/* Analysis section */}
+        {exam.analysis ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-800 to-indigo-900 px-5 py-4 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
               </div>
-            )}
-            {exam.analysis.weaknesses?.length > 0 && (
-              <div className="bg-red-50 rounded-lg p-4 border border-red-100">
-                <h3 className="text-sm font-semibold text-red-700 mb-2">Weaknesses</h3>
-                <ul className="text-sm text-red-800 space-y-1">
-                  {exam.analysis.weaknesses.map((w, i) => <li key={i}>- {w}</li>)}
-                </ul>
-              </div>
-            )}
-            {exam.analysis.recommendations?.length > 0 && (
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
-                <h3 className="text-sm font-semibold text-blue-700 mb-2">Recommendations</h3>
-                <ul className="text-sm text-blue-800 space-y-1">
-                  {exam.analysis.recommendations.map((r, i) => <li key={i}>- {r}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="flex items-center gap-3 mb-8">
-          <button
-            onClick={handleRunAnalysis}
-            disabled={analyzing}
-            className="bg-purple-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-purple-700 transition text-sm disabled:opacity-50 flex items-center gap-2"
-          >
-            {analyzing ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                Analyzing...
-              </>
-            ) : analysisDone ? (
-              'Analysis Generated'
-            ) : (
-              'Run Analysis'
-            )}
-          </button>
-          <span className="text-sm text-gray-500">Generate strengths, weaknesses, and recommendations</span>
-        </div>
-      )}
-
-      {/* All Answers */}
-      <div className="space-y-4 mb-8">
-        <h2 className="text-xl font-bold text-gray-800 mb-4">All Answers</h2>
-        {answers.length === 0 ? (
-          <div className="bg-white rounded-xl p-8 text-center shadow-sm border border-gray-100">
-            <p className="text-gray-500">No answers submitted yet.</p>
+              <h2 className="font-semibold text-white text-sm">AI Analysis</h2>
+            </div>
+            <div className="p-5 grid md:grid-cols-3 gap-4">
+              {exam.analysis.strengths?.length > 0 && (
+                <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                  <h3 className="text-xs font-semibold text-emerald-700 uppercase tracking-wider mb-2">Strengths</h3>
+                  <ul className="space-y-1">
+                    {exam.analysis.strengths.map((s, i) => (
+                      <li key={i} className="text-sm text-emerald-800 flex gap-2"><span className="text-emerald-500">+</span>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {exam.analysis.weaknesses?.length > 0 && (
+                <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                  <h3 className="text-xs font-semibold text-red-700 uppercase tracking-wider mb-2">Weaknesses</h3>
+                  <ul className="space-y-1">
+                    {exam.analysis.weaknesses.map((w, i) => (
+                      <li key={i} className="text-sm text-red-800 flex gap-2"><span className="text-red-500">-</span>{w}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {exam.analysis.recommendations?.length > 0 && (
+                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+                  <h3 className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-2">Recommendations</h3>
+                  <ul className="space-y-1">
+                    {exam.analysis.recommendations.map((r, i) => (
+                      <li key={i} className="text-sm text-blue-800 flex gap-2"><span className="text-blue-500">*</span>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
-          answers.map((ans, i) => {
-            const isDescriptive = ans.question?.question_type === 'SHORT' || ans.question?.question_type === 'LONG';
-            const review = reviewData[ans.id] || { teacher_score: '', teacher_feedback: '' };
-
-            return (
-              <div key={ans.id} className={`bg-white rounded-xl p-6 shadow-sm border-l-4 ${
-                ans.is_correct ? 'border-green-500' :
-                (ans.marks_obtained > 0 || ans.ai_score > 0) ? 'border-yellow-500' : 'border-red-500'
-              }`}>
-                {/* Question header */}
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                      ans.question?.question_type === 'MCQ' ? 'bg-blue-100 text-blue-700' :
-                      ans.question?.question_type === 'SHORT' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-purple-100 text-purple-700'
-                    }`}>
-                      {ans.question?.question_type}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {ans.question?.marks} mark{ans.question?.marks !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <span className={`font-bold text-sm ${
-                    ans.is_correct ? 'text-green-600' :
-                    (ans.marks_obtained > 0 || ans.ai_score > 0) ? 'text-yellow-600' : 'text-red-600'
-                  }`}>
-                    {ans.marks_obtained ?? ans.ai_score ?? 0}/{ans.question?.marks}
-                  </span>
-                </div>
-
-                {/* Question text */}
-                <p className="font-medium text-gray-800 mb-3">Q{i + 1}. {ans.question?.question_text}</p>
-
-                {/* MCQ options */}
-                {ans.question?.question_type === 'MCQ' ? (
-                  <div className="space-y-1.5 text-sm">
-                    {['A', 'B', 'C', 'D'].map((opt) => {
-                      const text = ans.question[`option_${opt.toLowerCase()}`];
-                      if (!text) return null;
-                      const isCorrect = opt === ans.question.correct_answer;
-                      const isSelected = opt === ans.selected_answer;
-                      return (
-                        <div key={opt} className={`px-3 py-2 rounded-lg ${
-                          isCorrect ? 'bg-green-50 text-green-800 font-medium' :
-                          isSelected && !isCorrect ? 'bg-red-50 text-red-800' : 'text-gray-600'
-                        }`}>
-                          {opt}. {text}
-                          {isCorrect && ' (correct)'}
-                          {isSelected && !isCorrect && ' (student answer)'}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-sm space-y-2">
-                    {/* Student answer */}
-                    <div className="bg-gray-50 p-3 rounded-lg">
-                      <span className="text-gray-500 font-medium">Student Answer:</span>
-                      <p className="text-gray-800 mt-1">{ans.text_answer || 'No answer provided'}</p>
-                    </div>
-
-                    {/* Model answer */}
-                    {ans.question?.model_answer && (
-                      <div className="bg-green-50 p-3 rounded-lg">
-                        <span className="text-green-600 font-medium">Model Answer:</span>
-                        <p className="text-gray-800 mt-1">{ans.question.model_answer}</p>
-                      </div>
-                    )}
-
-                    {/* AI feedback */}
-                    {(ans.ai_feedback || ans.ai_score != null) && (
-                      <div className="bg-blue-50 p-3 rounded-lg">
-                        <span className="text-blue-600 font-medium">AI Score: {ans.ai_score ?? '-'}/{ans.question?.marks}</span>
-                        {ans.ai_feedback && (
-                          <p className="text-gray-800 mt-1">{ans.ai_feedback}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Teacher review section for descriptive answers */}
-                {isDescriptive && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">Teacher Review</h4>
-                    <div className="grid md:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Score (out of {ans.question?.marks})
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          max={ans.question?.marks}
-                          step="0.5"
-                          value={review.teacher_score}
-                          onChange={(e) => handleReviewChange(ans.id, 'teacher_score', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Feedback</label>
-                        <input
-                          type="text"
-                          value={review.teacher_feedback}
-                          onChange={(e) => handleReviewChange(ans.id, 'teacher_feedback', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition"
-                          placeholder="Optional feedback..."
-                        />
-                      </div>
-                      <div className="flex items-end">
-                        <button
-                          onClick={() => handleSave(ans.id)}
-                          disabled={saving[ans.id]}
-                          className={`w-full px-4 py-2 rounded-lg text-sm font-medium transition min-h-[38px] ${
-                            saved[ans.id]
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                          } disabled:opacity-50`}
-                        >
-                          {saving[ans.id] ? (
-                            <span className="flex items-center justify-center gap-1">
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                            </span>
-                          ) : saved[ans.id] ? (
-                            'Saved'
-                          ) : (
-                            'Save'
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    {/* Show existing teacher review if present and not being edited */}
-                    {ans.teacher_score != null && !reviewData[ans.id] && (
-                      <div className="mt-2 bg-indigo-50 p-3 rounded-lg text-sm">
-                        <span className="text-indigo-600 font-medium">
-                          Your Score: {ans.teacher_score}/{ans.question?.marks}
-                        </span>
-                        {ans.teacher_feedback && (
-                          <p className="text-gray-700 mt-1">{ans.teacher_feedback}</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Explanation */}
-                {ans.question?.explanation && (
-                  <div className="mt-3 text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                    <span className="font-medium">Explanation:</span> {ans.question.explanation}
-                  </div>
-                )}
-              </div>
-            );
-          })
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex items-center gap-4">
+            <button
+              onClick={handleRunAnalysis}
+              disabled={analyzing}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white font-semibold rounded-xl text-sm transition-all disabled:opacity-50 shadow-sm"
+            >
+              {analyzing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                  Analyzing…
+                </>
+              ) : analysisDone ? (
+                'Analysis Generated'
+              ) : (
+                'Run AI Analysis'
+              )}
+            </button>
+            <p className="text-sm text-gray-500">Generate strengths, weaknesses, and recommendations for this student</p>
+          </div>
         )}
-      </div>
 
-      {/* Actions */}
-      <div className="flex gap-4">
-        <Link
-          to={exam.assigned_exam_id ? `/teacher/exam/${exam.assigned_exam_id}/submissions` : '/teacher/created-exams'}
-          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-indigo-700 transition"
-        >
-          ← Back to Submissions
-        </Link>
-        <Link to="/teacher/dashboard" className="bg-gray-200 text-gray-700 px-6 py-3 rounded-xl font-medium hover:bg-gray-300 transition">
-          Dashboard
-        </Link>
+        {/* Answers */}
+        <div>
+          <h2 className="text-lg font-bold text-gray-800 mb-4">All Answers</h2>
+          {answers.length === 0 ? (
+            <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-gray-100">
+              <p className="text-gray-500">No answers submitted yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {answers.map((ans, i) => {
+                const isDescriptive = ans.question?.question_type === 'SHORT' || ans.question?.question_type === 'LONG';
+                const review = reviewData[ans.id] || { teacher_score: '', teacher_feedback: '' };
+                const correct = ans.is_correct;
+                const partial = !correct && (ans.marks_obtained > 0 || ans.ai_score > 0);
+                const strip = correct ? 'border-l-emerald-500' : partial ? 'border-l-amber-400' : 'border-l-red-500';
+
+                return (
+                  <div key={ans.id} className={`bg-white rounded-2xl shadow-sm border border-gray-100 border-l-4 ${strip} overflow-hidden`}>
+                    {/* Question header */}
+                    <div className="px-5 py-3.5 flex items-center justify-between border-b border-gray-50">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                          ans.question?.question_type === 'MCQ' ? 'bg-blue-100 text-blue-700' :
+                          ans.question?.question_type === 'SHORT' ? 'bg-amber-100 text-amber-700' :
+                          'bg-violet-100 text-violet-700'
+                        }`}>
+                          {ans.question?.question_type}
+                        </span>
+                        <span className="text-xs text-gray-400">Q{i + 1} · {ans.question?.marks} mark{ans.question?.marks !== 1 ? 's' : ''}</span>
+                      </div>
+                      <span className={`font-bold text-sm ${correct ? 'text-emerald-600' : partial ? 'text-amber-600' : 'text-red-600'}`}>
+                        {ans.marks_obtained ?? ans.ai_score ?? 0}/{ans.question?.marks}
+                      </span>
+                    </div>
+
+                    <div className="p-5 space-y-3">
+                      <p className="font-medium text-gray-800 text-sm">{ans.question?.question_text}</p>
+
+                      {ans.question?.question_type === 'MCQ' ? (
+                        <div className="space-y-1.5">
+                          {['A', 'B', 'C', 'D'].map((opt) => {
+                            const text = ans.question[`option_${opt.toLowerCase()}`];
+                            if (!text) return null;
+                            const isCorrect = opt === ans.question.correct_answer;
+                            const isSelected = opt === ans.selected_answer;
+                            return (
+                              <div key={opt} className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm ${
+                                isCorrect ? 'bg-emerald-50 border border-emerald-200' :
+                                isSelected && !isCorrect ? 'bg-red-50 border border-red-200' :
+                                'bg-gray-50 border border-transparent'
+                              }`}>
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                                  isCorrect ? 'bg-emerald-500 text-white' :
+                                  isSelected && !isCorrect ? 'bg-red-500 text-white' : 'bg-gray-200 text-gray-600'
+                                }`}>{opt}</span>
+                                <span className={isCorrect ? 'text-emerald-800' : isSelected && !isCorrect ? 'text-red-700' : 'text-gray-600'}>
+                                  {text}
+                                  {isCorrect && <span className="ml-2 text-xs font-medium">(correct)</span>}
+                                  {isSelected && !isCorrect && <span className="ml-2 text-xs font-medium">(student answer)</span>}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                            <p className="text-xs text-gray-500 font-medium mb-1">Student Answer</p>
+                            <p className="text-sm text-gray-800">{ans.text_answer || 'No answer provided'}</p>
+                          </div>
+                          {ans.question?.model_answer && (
+                            <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                              <p className="text-xs text-emerald-600 font-medium mb-1">Model Answer</p>
+                              <p className="text-sm text-gray-800">{ans.question.model_answer}</p>
+                            </div>
+                          )}
+                          {(ans.ai_feedback || ans.ai_score != null) && (
+                            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                              <p className="text-xs text-blue-600 font-medium mb-1">AI Score: {ans.ai_score ?? '—'}/{ans.question?.marks}</p>
+                              {ans.ai_feedback && <p className="text-sm text-gray-800">{ans.ai_feedback}</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Teacher review */}
+                      {isDescriptive && (
+                        <div className="mt-2 pt-4 border-t border-gray-100">
+                          <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Teacher Review</p>
+                          <div className="grid md:grid-cols-4 gap-3">
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">Score (out of {ans.question?.marks})</label>
+                              <input
+                                type="number" min="0" max={ans.question?.marks} step="0.5"
+                                value={review.teacher_score}
+                                onChange={(e) => handleReviewChange(ans.id, 'teacher_score', e.target.value)}
+                                className="w-full px-3 py-2 border-2 border-gray-100 rounded-xl text-sm focus:outline-none focus:border-indigo-400 transition bg-gray-50"
+                                placeholder="0"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <label className="block text-xs text-gray-400 mb-1">Feedback</label>
+                              <input
+                                type="text"
+                                value={review.teacher_feedback}
+                                onChange={(e) => handleReviewChange(ans.id, 'teacher_feedback', e.target.value)}
+                                className="w-full px-3 py-2 border-2 border-gray-100 rounded-xl text-sm focus:outline-none focus:border-indigo-400 transition bg-gray-50"
+                                placeholder="Optional feedback…"
+                              />
+                            </div>
+                            <div className="flex items-end">
+                              <button
+                                onClick={() => handleSave(ans.id)}
+                                disabled={saving[ans.id]}
+                                className={`w-full py-2 rounded-xl text-sm font-semibold transition ${
+                                  saved[ans.id]
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow-sm'
+                                } disabled:opacity-50`}
+                              >
+                                {saving[ans.id] ? (
+                                  <span className="flex items-center justify-center gap-1">
+                                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                                  </span>
+                                ) : saved[ans.id] ? 'Saved ✓' : 'Save'}
+                              </button>
+                            </div>
+                          </div>
+                          {ans.teacher_score != null && !reviewData[ans.id] && (
+                            <div className="mt-2 bg-indigo-50 rounded-xl p-3 border border-indigo-100">
+                              <p className="text-xs text-indigo-600 font-medium">Your score: {ans.teacher_score}/{ans.question?.marks}</p>
+                              {ans.teacher_feedback && <p className="text-sm text-gray-700 mt-0.5">{ans.teacher_feedback}</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {ans.question?.explanation && (
+                        <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                          <p className="text-xs text-amber-700 font-medium mb-1">Explanation</p>
+                          <p className="text-sm text-gray-700">{ans.question.explanation}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="flex gap-3 pb-4">
+          <Link
+            to={backTo}
+            className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm"
+          >
+            Back to Submissions
+          </Link>
+          <Link
+            to="/teacher/dashboard"
+            className="px-6 py-3 bg-white border-2 border-gray-200 hover:border-indigo-300 text-gray-700 font-semibold rounded-xl transition-all text-sm"
+          >
+            Dashboard
+          </Link>
+        </div>
       </div>
     </div>
   );
