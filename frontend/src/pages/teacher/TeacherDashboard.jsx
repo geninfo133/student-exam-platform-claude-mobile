@@ -68,41 +68,53 @@ export default function TeacherDashboard() {
     <div className="min-h-screen bg-slate-50">
 
       {/* ── HERO BANNER (full-width, flush with navbar) ── */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-violet-900">
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950">
+        <img
+          src="https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80"
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover opacity-10"
+        />
+        <div className="absolute inset-0 bg-black/40" />
         <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
-        <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 rounded-full bg-indigo-600/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-10 -left-10 w-48 h-48 rounded-full bg-violet-600/20 blur-3xl" />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col sm:flex-row items-start sm:items-center gap-6">
-          <Avatar src={user?.profile_photo} name={user?.first_name || user?.username} size="xl" className="ring-4 ring-white/20 shadow-lg" />
-
-          <div className="flex-1 min-w-0">
-            <p className="text-indigo-300 text-sm font-medium mb-1">{greeting()}</p>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
-              {user?.first_name ? `${user.first_name} ${user.last_name || ''}`.trim() : user?.username}
+        <div className="relative max-w-7xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Teacher Portal</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">
+              {greeting()}, {user?.first_name || user?.username}!
             </h1>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3">
-              <span className="inline-flex items-center text-indigo-200 text-sm">
-                <svg className="w-4 h-4 mr-1.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H5a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            <div className="hidden sm:flex gap-3 shrink-0">
+              <Link to="/teacher/create-exam"
+                className="inline-flex items-center gap-2 bg-white text-indigo-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-50 transition shadow-lg">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                {user?.school_name || 'Organization Admin'}
-              </span>
-              <span className="w-1 h-1 rounded-full bg-indigo-400/50 hidden sm:block" />
-              <span className="text-indigo-300 text-sm font-medium capitalize">{user?.role} Account</span>
+                Create Exam
+              </Link>
+              <Link to="/teacher/upload-handwritten"
+                className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white border border-white/20 px-4 py-2 rounded-xl font-bold text-sm hover:bg-white/20 transition">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Upload Paper
+              </Link>
             </div>
           </div>
+          <p className="text-indigo-200 text-sm mb-6">{user?.school_name || 'Manage exams, grade submissions, and track student progress.'}</p>
 
-          <div className="hidden lg:flex items-center gap-8 px-8 py-4 bg-white/10 rounded-2xl backdrop-blur-sm border border-white/10">
-            <div className="text-center">
-              <p className="text-white text-xl font-bold">{stats.papers}</p>
-              <p className="text-indigo-300 text-[10px] font-bold uppercase tracking-wider">Papers</p>
-            </div>
-            <div className="w-px h-8 bg-white/10" />
-            <div className="text-center">
-              <p className="text-white text-xl font-bold">{stats.pending_grading}</p>
-              <p className="text-indigo-300 text-[10px] font-bold uppercase tracking-wider">To Grade</p>
-            </div>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Papers',   value: stats.papers,          color: 'bg-white/10 border-white/20',             text: 'text-white'      },
+              { label: 'Exams',    value: stats.exams,           color: 'bg-indigo-500/30 border-indigo-400/40',   text: 'text-indigo-200' },
+              { label: 'To Grade', value: stats.pending_grading, color: 'bg-amber-500/20 border-amber-400/30',     text: 'text-amber-200'  },
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>
