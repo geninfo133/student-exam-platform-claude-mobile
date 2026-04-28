@@ -2176,8 +2176,6 @@ class ProgressCardView(generics.GenericAPIView):
         hw_qs = HandwrittenExam.objects.filter(
             student=student,
             status='GRADED',
-        ).exclude(
-            exam_category='',
         ).select_related('subject', 'subject__exam_type')
 
         if exam_category:
