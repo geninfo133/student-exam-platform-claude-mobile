@@ -175,69 +175,34 @@ export default function SchoolDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
 
-        {/* ── Welcome Banner ── */}
-        <div className="relative rounded-3xl overflow-hidden shadow-2xl min-h-[220px]">
-          {/* Background */}
-          {heroBg ? (
-            <>
-              <img src={heroBg} alt="" className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-black/60" />
-            </>
-          ) : (
-            <>
-              <img
-                src="https://images.unsplash.com/photo-1588072432836-e10032774350?w=1600&q=80&auto=format&fit=crop"
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover object-center"
-              />
-              <div className="absolute inset-0 bg-black/65" />
-              <div className="absolute inset-0 bg-indigo-950/40" />
-            </>
-          )}
+      {/* ── Welcome Banner (full-width, flush with navbar) ── */}
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950">
+        <img
+          src={heroBg || 'https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80'}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover opacity-10"
+        />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
 
-          {/* Dot grid texture */}
-          <div className="absolute inset-0" style={{
-            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px)',
-            backgroundSize: '32px 32px',
-          }} />
-
-          {/* Content */}
-          <div className="relative z-10 p-8 md:p-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-            <div className="flex items-center gap-5">
-              {user?.profile_photo ? (
-                <img src={user.profile_photo} alt="Profile" className="w-20 h-20 rounded-2xl object-cover border-2 border-white/30 shadow-xl shrink-0" />
-              ) : (
-                <div className="w-20 h-20 rounded-2xl bg-white/15 backdrop-blur-sm border border-white/20 flex items-center justify-center text-3xl font-black text-white shrink-0 shadow-xl">
-                  {initials}
-                </div>
-              )}
-              <div>
-                <p className="text-indigo-300 text-sm font-bold uppercase tracking-widest mb-1">School Administration</p>
-                <h1 className="text-3xl md:text-4xl font-black text-white leading-tight">
-                  Welcome back, {userName}!
-                </h1>
-                <p className="text-white/60 mt-1 text-sm">
-                  Here's what's happening at your institution today.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3 shrink-0">
-              <Link
-                to="/school/teachers"
-                className="inline-flex items-center gap-2 bg-white text-indigo-700 px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-indigo-50 transition shadow-lg"
-              >
+        <div className="relative max-w-7xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">School Administration</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">Welcome back, {userName}!</h1>
+            <div className="hidden sm:flex gap-3 shrink-0">
+              <Link to="/school/teachers"
+                className="inline-flex items-center gap-2 bg-white text-indigo-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-50 transition shadow-lg">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 Add Teacher
               </Link>
-              <Link
-                to="/school/students"
-                className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white border border-white/20 px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-white/20 transition"
-              >
+              <Link to="/school/students"
+                className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white border border-white/20 px-4 py-2 rounded-xl font-bold text-sm hover:bg-white/20 transition">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
@@ -245,7 +210,25 @@ export default function SchoolDashboard() {
               </Link>
             </div>
           </div>
+          <p className="text-indigo-200 text-sm mb-6">Here's what's happening at your institution today.</p>
+
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Teachers', value: stats?.teachers_count ?? 0, color: 'bg-white/10 border-white/20',             text: 'text-white'       },
+              { label: 'Students', value: stats?.students_count ?? 0, color: 'bg-indigo-500/30 border-indigo-400/40',   text: 'text-indigo-200'  },
+              { label: 'Exams',    value: stats?.exams_count    ?? 0, color: 'bg-emerald-500/20 border-emerald-400/30', text: 'text-emerald-200' },
+              { label: 'Papers',   value: stats?.papers_count   ?? 0, color: 'bg-amber-500/20 border-amber-400/30',     text: 'text-amber-200'   },
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
+              </div>
+            ))}
+          </div>
         </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-8 space-y-8">
 
         {/* ── Stat Cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">

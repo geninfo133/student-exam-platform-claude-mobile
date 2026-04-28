@@ -132,7 +132,7 @@ export default function ProgressCard() {
               <div className="flex flex-wrap gap-3 mt-4">
                 <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-center backdrop-blur-sm">
                   <p className="text-lg font-extrabold text-white">{rows.length}</p>
-                  <p className="text-indigo-300 text-xs">Subjects</p>
+                  <p className="text-indigo-300 text-xs">Exams</p>
                 </div>
                 <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-center backdrop-blur-sm">
                   <p className="text-lg font-extrabold text-emerald-300">{passCount}</p>

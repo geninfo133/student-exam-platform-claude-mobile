@@ -171,7 +171,7 @@ export default function StudentProgressCard() {
                   )}
                   <div className="flex flex-wrap gap-2 mt-2">
                     {[
-                      { label: 'Subjects',     value: rows.length,   color: 'bg-white/10 text-white'         },
+                      { label: 'Exams',        value: rows.length,   color: 'bg-white/10 text-white'         },
                       { label: 'Passed',        value: passCount,     color: 'bg-emerald-500/30 text-emerald-200' },
                       failCount > 0 && { label: 'Failed', value: failCount, color: 'bg-red-500/30 text-red-200' },
                       topSubject && { label: 'Best',   value: topSubject.subject, color: 'bg-amber-500/20 text-amber-200' },
