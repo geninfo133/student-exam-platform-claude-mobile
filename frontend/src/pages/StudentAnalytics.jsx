@@ -91,83 +91,65 @@ export default function StudentAnalytics() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Banner */}
-      <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80')`,
-            backgroundSize: 'cover', backgroundPosition: 'center',
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-20"
-          style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }}
-        />
-        <div className="absolute top-10 right-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-10 w-48 h-48 bg-violet-500/20 rounded-full blur-2xl" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950">
+        <img src="https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80"
+          alt="" className="absolute inset-0 w-full h-full object-cover opacity-10" />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-4 py-12">
-          <div className="flex items-center gap-4 mb-8">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-900/40 flex-shrink-0">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-indigo-300 text-sm font-medium uppercase tracking-wider">Overview</p>
-              <h1 className="text-3xl font-bold text-white">My Performance</h1>
-            </div>
+        <div className="relative max-w-7xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Student Portal</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">My Performance</h1>
           </div>
+          <p className="text-indigo-200 text-sm mb-6">Track your exam scores and progress over time</p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Total Exams', value: overview?.total_exams ?? 0,             color: 'bg-white/10 border-white/20',             text: 'text-white'       },
+              { label: 'Avg Score',   value: overview?.average_percentage != null ? `${overview.average_percentage}%` : '—', color: 'bg-emerald-500/20 border-emerald-400/30', text: 'text-emerald-200' },
+              { label: 'Pass Rate',   value: overview?.pass_rate != null ? `${overview.pass_rate}%` : '—', color: 'bg-indigo-500/30 border-indigo-400/40', text: 'text-indigo-200' },
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-          {/* Filters */}
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Period pills */}
-            <div className="flex bg-white/10 backdrop-blur-sm rounded-xl overflow-hidden border border-white/10">
-              {PERIOD_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => setPeriod(opt.value)}
-                  className={`px-4 py-2 text-sm font-medium transition ${
-                    period === opt.value
-                      ? 'bg-white text-indigo-700'
-                      : 'text-indigo-200 hover:bg-white/10'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            {subjects?.length > 0 && (
-              <select
-                value={subjectFilter}
-                onChange={(e) => setSubjectFilter(e.target.value)}
-                className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-400"
+      {/* Filters */}
+      <div className="max-w-7xl mx-auto px-4 pt-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex bg-white rounded-xl overflow-hidden border border-gray-200 shadow-sm">
+            {PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => setPeriod(opt.value)}
+                className={`px-4 py-2 text-sm font-medium transition ${
+                  period === opt.value
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
               >
-                <option value="" className="text-gray-800">All Subjects</option>
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id} className="text-gray-800">{s.name}</option>
-                ))}
-              </select>
-            )}
+                {opt.label}
+              </button>
+            ))}
           </div>
 
-          {/* Overview tiles */}
-          {!isEmpty && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-8">
-              {[
-                { label: 'Total Exams', value: overview.total_exams, sub: 'taken' },
-                { label: 'Avg Score', value: `${overview.average_percentage}%`, sub: 'average' },
-                { label: 'Best Score', value: `${overview.best_score}%`, sub: 'highest' },
-                { label: 'Pass Rate', value: `${overview.pass_rate}%`, sub: `${overview.pass_count} passed` },
-              ].map(({ label, value, sub }) => (
-                <div key={label} className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-3 text-center border border-white/10">
-                  <p className="text-2xl font-bold text-white">{value}</p>
-                  <p className="text-indigo-200 text-xs mt-0.5">{label}</p>
-                  <p className="text-indigo-300/60 text-xs">{sub}</p>
-                </div>
+          {subjects?.length > 0 && (
+            <select
+              value={subjectFilter}
+              onChange={(e) => setSubjectFilter(e.target.value)}
+              className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 focus:outline-none focus:border-indigo-400 shadow-sm"
+            >
+              <option value="">All Subjects</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
               ))}
-            </div>
+            </select>
           )}
         </div>
       </div>

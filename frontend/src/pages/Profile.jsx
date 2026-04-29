@@ -143,63 +143,23 @@ export default function Profile() {
     <div className="min-h-screen bg-slate-50">
 
       {/* ── Profile Header Banner ── */}
-      <div className="relative bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 overflow-hidden">
-        <div className="absolute inset-0" style={{
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)',
-          backgroundSize: '28px 28px',
-        }} />
-        <div className="absolute top-0 right-0 w-72 h-72 rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #7c3aed, transparent 70%)', filter: 'blur(60px)' }} />
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950">
+        <img src="https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80"
+          alt="" className="absolute inset-0 w-full h-full object-cover opacity-10" />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 py-10 flex flex-col sm:flex-row items-center gap-6">
-          {/* Avatar with upload overlay */}
-          <div className="relative group cursor-pointer shrink-0" onClick={() => fileRef.current?.click()}>
-            <div className="w-28 h-28 rounded-2xl overflow-hidden border-2 border-white/20 shadow-2xl">
-              {user.profile_photo ? (
-                <img src={user.profile_photo} alt="Profile" className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full bg-white/10 backdrop-blur-sm flex items-center justify-center text-4xl font-black text-white">
-                  {initials}
-                </div>
-              )}
-            </div>
-            {/* Hover overlay */}
-            <div className="absolute inset-0 rounded-2xl bg-black/50 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition">
-              <svg className="w-6 h-6 text-white mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span className="text-white text-xs font-bold">{uploading ? 'Uploading…' : 'Change'}</span>
-            </div>
-            {uploading && (
-              <div className="absolute inset-0 rounded-2xl bg-black/60 flex items-center justify-center">
-                <div className="animate-spin h-8 w-8 border-4 border-white/30 border-t-white rounded-full" />
-              </div>
-            )}
-          </div>
-          <input ref={fileRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
-
-          {/* Info */}
-          <div className="text-center sm:text-left">
-            <span className="inline-block px-3 py-1 rounded-full bg-white/10 border border-white/10 text-indigo-300 text-xs font-bold mb-2">
-              {roleBadge}
-            </span>
-            <h1 className="text-3xl font-black text-white">{fullName}</h1>
-            <p className="text-slate-400 text-sm mt-1">@{user.username}</p>
-            {(user.board || user.grade) && (
-              <p className="text-slate-400 text-sm mt-0.5">
-                {[user.board, user.grade && `Class ${user.grade}`].filter(Boolean).join(' · ')}
-              </p>
-            )}
-          </div>
-
-          {/* Upload button (desktop) */}
-          <div className="sm:ml-auto shrink-0">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">{roleBadge}</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">{fullName}</h1>
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50"
+              className="hidden sm:inline-flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 rounded-xl text-sm font-bold transition disabled:opacity-50 shrink-0"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -207,6 +167,22 @@ export default function Profile() {
               </svg>
               {uploading ? 'Uploading…' : user.profile_photo ? 'Change Photo' : 'Add Photo'}
             </button>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
+          <p className="text-indigo-200 text-sm mb-6">
+            {[`@${user.username}`, user.board, user.grade && `Class ${user.grade}`].filter(Boolean).join(' · ')}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]">
+              <p className="text-xl font-extrabold text-white">@{user.username}</p>
+              <p className="text-white/50 text-xs">Username</p>
+            </div>
+            {user.school_account_name && (
+              <div className="bg-indigo-500/30 border border-indigo-400/40 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm">
+                <p className="text-xl font-extrabold text-indigo-200 truncate max-w-[120px]">{user.school_account_name}</p>
+                <p className="text-white/50 text-xs">School</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

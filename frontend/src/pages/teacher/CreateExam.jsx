@@ -313,27 +313,34 @@ export default function CreateExam() {
           style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
         <div className="absolute -top-16 -right-16 w-64 h-64 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-4 py-8">
-          <Link
-            to={isEditMode ? '/teacher/results' : '/teacher/dashboard'}
-            className="inline-flex items-center gap-1.5 text-indigo-300 hover:text-white text-sm font-medium transition mb-4"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            {isEditMode ? 'Back to Results' : 'Back to Dashboard'}
-          </Link>
-          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">
-            {isEditMode ? 'Edit Exam' : 'Create Exam'}
+        <div className="relative max-w-7xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Teacher Portal</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">
+              {isEditMode ? 'Update Exam Details' : 'New Exam Setup'}
+            </h1>
+            <Link
+              to={isEditMode ? '/teacher/results' : '/teacher/dashboard'}
+              className="hidden sm:inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white border border-white/20 px-4 py-2 rounded-xl font-bold text-sm hover:bg-white/20 transition shrink-0"
+            >
+              Back
+            </Link>
+          </div>
+          <p className="text-indigo-200 text-sm mb-6">
+            {isEditMode ? 'Modify the exam settings and save changes.' : 'Configure a new exam and assign it to students.'}
           </p>
-          <h1 className="text-3xl font-extrabold text-white">
-            {isEditMode ? 'Update Exam Details' : 'New Exam Setup'}
-          </h1>
-          <p className="text-indigo-200 text-sm mt-1">
-            {isEditMode
-              ? 'Modify the exam settings and save changes.'
-              : 'Configure a new exam and assign it to students.'}
-          </p>
+          <div className="flex flex-wrap gap-3">
+            <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]">
+              <p className="text-xl font-extrabold text-white">{isEditMode ? 'Edit' : 'New'}</p>
+              <p className="text-white/50 text-xs">Mode</p>
+            </div>
+            {assignments.length > 0 && (
+              <div className="bg-indigo-500/30 border border-indigo-400/40 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]">
+                <p className="text-xl font-extrabold text-indigo-200">{assignments.length}</p>
+                <p className="text-white/50 text-xs">Subjects</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

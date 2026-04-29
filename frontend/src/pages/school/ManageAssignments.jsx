@@ -124,37 +124,33 @@ export default function ManageAssignments() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Banner */}
-      <div className="relative bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 overflow-hidden">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: `url('https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80')`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
-        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle, #6366f1 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
-        <div className="absolute top-10 right-20 w-64 h-64 bg-blue-500/20 rounded-full blur-3xl" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950">
+        <img src="https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80"
+          alt="" className="absolute inset-0 w-full h-full object-cover opacity-10" />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-4 py-12">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg flex-shrink-0">
-              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-            </div>
-            <div>
-              <p className="text-blue-300 text-sm font-medium uppercase tracking-wider">School Admin</p>
-              <h1 className="text-3xl font-bold text-white">Teacher Assignments</h1>
-              <p className="text-indigo-200 text-sm mt-0.5">{isCoaching ? 'Select a teacher and subject to assign.' : 'Select a teacher, subject and class to assign.'}</p>
-            </div>
+        <div className="relative max-w-7xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">School Administration</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">Teacher Assignments</h1>
           </div>
-          <div className="flex gap-3">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
-              <p className="text-2xl font-bold text-white">{assignments.length}</p>
-              <p className="text-blue-200 text-xs mt-0.5">Assignments</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
-              <p className="text-2xl font-bold text-white">{teachers.length}</p>
-              <p className="text-blue-200 text-xs mt-0.5">Teachers</p>
-            </div>
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
-              <p className="text-2xl font-bold text-white">{students.length}</p>
-              <p className="text-blue-200 text-xs mt-0.5">Students</p>
-            </div>
+          <p className="text-indigo-200 text-sm mb-6">
+            {isCoaching ? 'Select a teacher and subject to assign.' : 'Select a teacher, subject and class to assign.'}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Assignments', value: assignments.length, color: 'bg-white/10 border-white/20',             text: 'text-white'      },
+              { label: 'Teachers',    value: teachers.length,    color: 'bg-indigo-500/30 border-indigo-400/40',   text: 'text-indigo-200' },
+              { label: 'Students',    value: students.length,    color: 'bg-emerald-500/20 border-emerald-400/30', text: 'text-emerald-200'},
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
+              </div>
+            ))}
           </div>
         </div>
       </div>

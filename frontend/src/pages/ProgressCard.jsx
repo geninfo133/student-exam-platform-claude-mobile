@@ -119,49 +119,28 @@ export default function ProgressCard() {
 
         <div className="relative max-w-7xl mx-auto px-4 py-10">
           <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Student Report</p>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-6">
-            <div className="flex-1">
-              <h1 className="text-3xl font-extrabold text-white mb-1">
-                {student?.name || user?.username || 'Progress Card'}
-              </h1>
-              {student?.grade && (
-                <p className="text-indigo-200 text-sm">
-                  Class {student.grade}{student.section} &nbsp;·&nbsp; {student.school || ''}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-3 mt-4">
-                <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-center backdrop-blur-sm">
-                  <p className="text-lg font-extrabold text-white">{rows.length}</p>
-                  <p className="text-indigo-300 text-xs">Exams</p>
-                </div>
-                <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-center backdrop-blur-sm">
-                  <p className="text-lg font-extrabold text-emerald-300">{passCount}</p>
-                  <p className="text-indigo-300 text-xs">Passed</p>
-                </div>
-                {failCount > 0 && (
-                  <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-center backdrop-blur-sm">
-                    <p className="text-lg font-extrabold text-red-300">{failCount}</p>
-                    <p className="text-indigo-300 text-xs">Failed</p>
-                  </div>
-                )}
-                {topSubject && (
-                  <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-center backdrop-blur-sm">
-                    <p className="text-sm font-extrabold text-amber-300 truncate max-w-[100px]">{topSubject.subject}</p>
-                    <p className="text-indigo-300 text-xs">Best Subject</p>
-                  </div>
-                )}
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">
+              {student?.name || user?.username || 'Progress Card'}
+            </h1>
+          </div>
+          <p className="text-indigo-200 text-sm mb-6">
+            {student?.grade
+              ? `Class ${student.grade}${student.section || ''} · ${student.school || ''}`
+              : 'Subject-wise performance and grade report'}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Exams',   value: rows.length,  color: 'bg-white/10 border-white/20',             text: 'text-white'       },
+              { label: 'Passed',  value: passCount,    color: 'bg-emerald-500/20 border-emerald-400/30', text: 'text-emerald-200' },
+              ...(failCount > 0 ? [{ label: 'Failed', value: failCount, color: 'bg-red-500/20 border-red-400/30', text: 'text-red-300' }] : []),
+              ...(rows.length > 0 ? [{ label: 'Overall',  value: `${grandPct}%`, color: 'bg-indigo-500/30 border-indigo-400/40', text: 'text-indigo-200' }] : []),
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
               </div>
-            </div>
-
-            {rows.length > 0 && (
-              <div className="flex flex-col items-center gap-1">
-                <ScoreRing pct={grandPct} size={110} />
-                <p className="text-indigo-200 text-xs font-medium">Overall Score</p>
-                <span className={`text-xs font-bold px-3 py-0.5 rounded-full border ${grandGrade.cls}`}>
-                  Grade {grandGrade.label}
-                </span>
-              </div>
-            )}
+            ))}
           </div>
         </div>
       </div>

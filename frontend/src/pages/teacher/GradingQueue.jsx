@@ -62,62 +62,35 @@ export default function GradingQueue() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Banner */}
-      <div className="relative bg-gradient-to-br from-slate-900 via-amber-950 to-orange-950 overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-10"
-          style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80')`,
-            backgroundSize: 'cover', backgroundPosition: 'center',
-          }}
-        />
-        <div
-          className="absolute inset-0 opacity-20"
-          style={{ backgroundImage: 'radial-gradient(circle, #f59e0b 1px, transparent 1px)', backgroundSize: '28px 28px' }}
-        />
-        <div className="absolute top-10 right-20 w-64 h-64 bg-amber-500/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-10 w-48 h-48 bg-orange-500/20 rounded-full blur-2xl" />
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950">
+        <img src="https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80"
+          alt="" className="absolute inset-0 w-full h-full object-cover opacity-10" />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
 
-        <div className="relative max-w-7xl mx-auto px-4 py-12">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-8">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg flex-shrink-0">
-                <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </div>
-              <div>
-                <p className="text-amber-300 text-sm font-medium uppercase tracking-wider">Teacher</p>
-                <h1 className="text-3xl font-bold text-white">Grading Queue</h1>
-                <p className="text-amber-200/70 text-sm mt-0.5">Student submissions awaiting AI grading</p>
-              </div>
-            </div>
-            <Link
-              to="/teacher/created-exams"
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white font-semibold rounded-xl transition-all text-sm flex-shrink-0"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
+        <div className="relative max-w-7xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Teacher Portal</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <h1 className="text-3xl font-extrabold text-white">Grading Queue</h1>
+            <Link to="/teacher/created-exams"
+              className="hidden sm:inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white border border-white/20 px-4 py-2 rounded-xl font-bold text-sm hover:bg-white/20 transition shrink-0">
               Created Exams
             </Link>
           </div>
-
-          {/* Stat tiles */}
-          <div className="flex gap-3">
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
-              <p className="text-2xl font-bold text-white">{pendingCount}</p>
-              <p className="text-amber-200 text-xs mt-0.5">Awaiting Grade</p>
-            </div>
-            {processingCount > 0 && (
-              <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
-                <p className="text-2xl font-bold text-white">{processingCount}</p>
-                <p className="text-amber-200 text-xs mt-0.5">Processing</p>
+          <p className="text-indigo-200 text-sm mb-6">Student submissions awaiting AI grading</p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'Total Queue',     value: pending.length, color: 'bg-white/10 border-white/20',           text: 'text-white'      },
+              { label: 'Awaiting Grade',  value: pendingCount,   color: 'bg-amber-500/20 border-amber-400/30',   text: 'text-amber-200'  },
+              { label: 'Processing',      value: processingCount, color: 'bg-indigo-500/30 border-indigo-400/40', text: 'text-indigo-200' },
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
               </div>
-            )}
-            <div className="bg-white/10 backdrop-blur-sm rounded-xl px-5 py-3 text-center border border-white/10">
-              <p className="text-2xl font-bold text-white">{pending.length}</p>
-              <p className="text-amber-200 text-xs mt-0.5">Total Queue</p>
-            </div>
+            ))}
           </div>
         </div>
       </div>
