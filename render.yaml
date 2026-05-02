@@ -16,8 +16,8 @@ services:
         value: "False"
       - key: ALLOWED_HOSTS
         value: "*"
-      - key: GEMINI_API_KEY
-        sync: false # You will need to add this manually in the dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false # Add this manually in the Render dashboard
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
