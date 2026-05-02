@@ -172,15 +172,17 @@ export default function PapersList() {
                           <h3 className="font-semibold text-gray-800 text-sm">{paper.title}</h3>
                           {paper.questions_generated ? (
                             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Generated</span>
-                          ) : paper.generation_error ? (
+                          ) : paper.generation_error && !paper.generation_error.startsWith('[') ? (
                             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-red-100 text-red-700">Error</span>
+                          ) : paper.generation_error ? (
+                            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700">Processing…</span>
                           ) : (
                             <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">Pending</span>
                           )}
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">{paper.subject_name} · {paper.total_marks} marks</p>
-                        {paper.generation_error && (
-                          <p className="text-xs text-red-500 mt-1">Error: {paper.generation_error}</p>
+                        {paper.generation_error && !paper.generation_error.startsWith('[') && (
+                          <p className="text-xs text-red-500 mt-1">{paper.generation_error}</p>
                         )}
                       </div>
                     </div>

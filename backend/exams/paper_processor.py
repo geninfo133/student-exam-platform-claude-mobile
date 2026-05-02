@@ -155,7 +155,7 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
                     continue
 
         exam_paper.questions_generated = True
-        exam_paper.generation_error = f'[SUCCESS] Done! {created_count} questions added to your Question Bank.'
+        exam_paper.generation_error = ''
         exam_paper.save()
         print(f"DEBUG: [GEN] Process complete! Saved {created_count} questions.")
 
