@@ -165,10 +165,159 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
 
 
 def generate_paper_from_multiple(paper_ids, instructions, subject, school, teacher, **kwargs):
+    """Generate questions from multiple uploaded papers."""
     db.connections.close_all()
-    return {'success': True}
+
+    num_mcq   = kwargs.get('num_mcq', 20)
+    num_short = kwargs.get('num_short', 5)
+    num_long  = kwargs.get('num_long', 4)
+
+    try:
+        api_key = str(settings.ANTHROPIC_API_KEY).strip()
+        if not api_key:
+            print("DEBUG: [MULTI] ANTHROPIC_API_KEY not configured.")
+            return
+
+        client = get_claude_client(api_key)
+
+        context_parts = []
+        for paper_id in paper_ids:
+            try:
+                paper = ExamPaper.objects.get(id=paper_id)
+                if paper.extracted_text:
+                    context_parts.append(paper.extracted_text[:5000])
+            except ExamPaper.DoesNotExist:
+                continue
+
+        context = '\n\n'.join(context_parts)
+
+        prompt = (
+            f"Generate {num_mcq} MCQ, {num_short} Short answer, and {num_long} Long answer exam questions "
+            f"for {subject.name}. "
+        )
+        if instructions:
+            prompt += f"Instructions: {instructions}. "
+        if context:
+            prompt += f"\n\nContext from uploaded papers:\n{context[:10000]}\n\n"
+
+        prompt += (
+            "Return ONLY valid JSON with a 'questions' key containing a list. "
+            "Each question must have: question_type (MCQ/SHORT/LONG), question_text, marks (int), "
+            "difficulty (EASY/MEDIUM/HARD), option_a, option_b, option_c, option_d (for MCQ), "
+            "correct_answer (A/B/C/D for MCQ), model_answer (explanation/answer text)."
+        )
+
+        print("DEBUG: [MULTI] Sending request to Claude AI...")
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=4096,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        response_text = response.content[0].text
+        print("DEBUG: [MULTI] Claude AI responded successfully.")
+
+        data_json = _extract_json(response_text)
+        if not data_json or not data_json.get('questions'):
+            print(f"DEBUG: [MULTI] Unexpected AI format: {response_text[:200]}")
+            return
+
+        created_count = 0
+        with transaction.atomic():
+            for q in data_json['questions']:
+                try:
+                    Question.objects.create(
+                        subject=subject, school=school, created_by=teacher,
+                        question_type=str(q.get('question_type', 'MCQ')).upper(),
+                        question_text=q.get('question_text', 'Sample Question'),
+                        option_a=str(q.get('option_a', ''))[:500],
+                        option_b=str(q.get('option_b', ''))[:500],
+                        option_c=str(q.get('option_c', ''))[:500],
+                        option_d=str(q.get('option_d', ''))[:500],
+                        correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
+                        model_answer=q.get('model_answer', ''),
+                        marks=int(q.get('marks', 1)),
+                        difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
+                    )
+                    created_count += 1
+                except Exception as inner_e:
+                    print(f"DEBUG: [MULTI] Skipping malformed question: {inner_e}")
+                    continue
+
+        print(f"DEBUG: [MULTI] Complete! Saved {created_count} questions.")
+
+    except Exception as e:
+        print(f"DEBUG: [MULTI] CRITICAL ERROR: {e}")
 
 
 def generate_questions_from_instructions(subject, chapters, topics, marks_distribution, total_marks, school, teacher):
+    """Generate questions from chapter/topic instructions."""
     db.connections.close_all()
-    return {'success': True}
+
+    num_mcq   = marks_distribution.get('num_mcq', 20)
+    num_short = marks_distribution.get('num_short', 5)
+    num_long  = marks_distribution.get('num_long', 4)
+
+    try:
+        api_key = str(settings.ANTHROPIC_API_KEY).strip()
+        if not api_key:
+            print("DEBUG: [INSTR] ANTHROPIC_API_KEY not configured.")
+            return
+
+        client = get_claude_client(api_key)
+
+        chapter_names = ', '.join([ch.name for ch in chapters]) if chapters else 'all chapters'
+
+        prompt = (
+            f"Generate {num_mcq} MCQ, {num_short} Short answer, and {num_long} Long answer exam questions "
+            f"for {subject.name}, covering chapters: {chapter_names}. "
+        )
+        if topics:
+            prompt += f"Focus topics: {topics}. "
+
+        prompt += (
+            "Return ONLY valid JSON with a 'questions' key containing a list. "
+            "Each question must have: question_type (MCQ/SHORT/LONG), question_text, marks (int), "
+            "difficulty (EASY/MEDIUM/HARD), option_a, option_b, option_c, option_d (for MCQ), "
+            "correct_answer (A/B/C/D for MCQ), model_answer (explanation/answer text)."
+        )
+
+        print("DEBUG: [INSTR] Sending request to Claude AI...")
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=4096,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
+        response_text = response.content[0].text
+        print("DEBUG: [INSTR] Claude AI responded successfully.")
+
+        data_json = _extract_json(response_text)
+        if not data_json or not data_json.get('questions'):
+            print(f"DEBUG: [INSTR] Unexpected AI format: {response_text[:200]}")
+            return
+
+        created_count = 0
+        with transaction.atomic():
+            for q in data_json['questions']:
+                try:
+                    Question.objects.create(
+                        subject=subject, school=school, created_by=teacher,
+                        question_type=str(q.get('question_type', 'MCQ')).upper(),
+                        question_text=q.get('question_text', 'Sample Question'),
+                        option_a=str(q.get('option_a', ''))[:500],
+                        option_b=str(q.get('option_b', ''))[:500],
+                        option_c=str(q.get('option_c', ''))[:500],
+                        option_d=str(q.get('option_d', ''))[:500],
+                        correct_answer=str(q.get('correct_answer', 'A'))[:1].upper(),
+                        model_answer=q.get('model_answer', ''),
+                        marks=int(q.get('marks', 1)),
+                        difficulty=str(q.get('difficulty', 'MEDIUM')).upper()
+                    )
+                    created_count += 1
+                except Exception as inner_e:
+                    print(f"DEBUG: [INSTR] Skipping malformed question: {inner_e}")
+                    continue
+
+        print(f"DEBUG: [INSTR] Complete! Saved {created_count} questions.")
+
+    except Exception as e:
+        print(f"DEBUG: [INSTR] CRITICAL ERROR: {e}")
