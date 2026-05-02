@@ -1,12 +1,11 @@
 """
-Extract text from uploaded exam papers (PDF) and generate questions using Gemini.
+Extract text from uploaded exam papers (PDF) and generate questions using Anthropic Claude.
 """
 import json
 import logging
 import mimetypes
 import requests
 import re
-import google.generativeai as genai
 import cloudinary
 import cloudinary.utils
 from django.conf import settings
@@ -16,16 +15,12 @@ from .models import ExamPaper, Question
 
 logger = logging.getLogger(__name__)
 
-def get_gemini_model(api_key):
-    """Reliable model selector with REST transport."""
-    genai.configure(api_key=api_key, transport='rest')
-    # Use the most universally stable model IDs
-    for m_name in ['gemini-1.5-flash', 'models/gemini-1.5-flash', 'gemini-pro']:
-        try:
-            model = genai.GenerativeModel(m_name)
-            return model
-        except: continue
-    return genai.GenerativeModel('gemini-1.5-flash')
+
+def get_claude_client(api_key):
+    """Get Anthropic Claude client."""
+    import anthropic
+    return anthropic.Anthropic(api_key=api_key)
+
 
 def _retrieve_file_data(file_field):
     """Simple, fast file retrieval with 10s timeout."""
@@ -33,8 +28,7 @@ def _retrieve_file_data(file_field):
     mime, _ = mimetypes.guess_type(url)
     if not mime:
         mime = 'application/pdf'
-    
-    # Try direct HTTP GET first (fastest method)
+
     try:
         resp = requests.get(url, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
         if resp.status_code == 200:
@@ -47,8 +41,9 @@ def _retrieve_file_data(file_field):
     except Exception as e:
         logger.error(f"File fetch error: {e}")
         raise ValueError(f"Could not download file: {str(e)}")
-    
+
     return None, None, "Failed"
+
 
 def _extract_json(text):
     text = text.strip()
@@ -63,8 +58,9 @@ def _extract_json(text):
             except: pass
     return None
 
+
 def _save_error(exam_paper_id, message):
-    """Reliably save an error message to the exam paper, creating a fresh DB connection."""
+    """Reliably save an error message to the exam paper."""
     try:
         db.connections.close_all()
         ep = ExamPaper.objects.get(id=exam_paper_id)
@@ -81,13 +77,10 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
         db.connections.close_all()
         exam_paper = ExamPaper.objects.get(id=exam_paper_id)
 
-        # Step 1: Get Content
+        # Step 1: Get content
         exam_paper.generation_error = '[PROGRESS] Reading your paper...'
         exam_paper.save()
 
-        # Use extracted text if available, otherwise generate from subject only.
-        # NOTE: Direct PDF download is skipped — it hangs indefinitely on Render free tier
-        # due to TCP/DNS-level blocking that Python timeouts cannot catch.
         content = None
         if exam_paper.extracted_text:
             print("DEBUG: [GEN] Using pre-extracted text.")
@@ -95,16 +88,16 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
         else:
             print("DEBUG: [GEN] No extracted text — generating from subject name only.")
 
-        # Step 2: AI Generation
+        # Step 2: AI generation
         print("DEBUG: [GEN] Moving to AI thinking phase...")
         exam_paper.generation_error = '[PROGRESS] AI is thinking (30-60s)...'
         exam_paper.save()
 
-        api_key = str(settings.GEMINI_API_KEY).strip()
+        api_key = str(settings.ANTHROPIC_API_KEY).strip()
         if not api_key:
-            raise ValueError("GEMINI_API_KEY is not configured. Please add it in your Render dashboard.")
+            raise ValueError("ANTHROPIC_API_KEY is not configured. Please add it in your Render dashboard.")
 
-        model = get_gemini_model(api_key)
+        client = get_claude_client(api_key)
 
         prompt = (
             f"Generate {num_mcq} MCQ, {num_short} Short answer, and {num_long} Long answer exam questions "
@@ -115,26 +108,28 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
             "correct_answer (A/B/C/D for MCQ), model_answer (explanation/answer text)."
         )
 
-        print("DEBUG: [GEN] Sending request to Gemini AI...")
-        final_prompt = [prompt]
-        if isinstance(content, list):
-            final_prompt.extend(content)
-        elif content:
-            final_prompt.append(content)
+        if content:
+            prompt = f"{content}\n\n{prompt}"
 
+        print("DEBUG: [GEN] Sending request to Claude AI...")
         try:
-            response = model.generate_content(final_prompt, request_options={'timeout': 55})
-            print("DEBUG: [GEN] Gemini AI responded successfully.")
-        except Exception as gemini_error:
-            logger.error(f"Gemini API error: {str(gemini_error)}")
-            raise ValueError(f"AI service error. Please check your GEMINI_API_KEY and try again. ({str(gemini_error)[:120]})")
+            response = client.messages.create(
+                model='claude-haiku-4-5-20251001',
+                max_tokens=4096,
+                messages=[{'role': 'user', 'content': prompt}]
+            )
+            response_text = response.content[0].text
+            print("DEBUG: [GEN] Claude AI responded successfully.")
+        except Exception as claude_error:
+            logger.error(f"Claude API error: {str(claude_error)}")
+            raise ValueError(f"AI service error. Please check your ANTHROPIC_API_KEY and try again. ({str(claude_error)[:120]})")
 
         exam_paper.generation_error = '[PROGRESS] Finalizing questions...'
         exam_paper.save()
 
-        data_json = _extract_json(response.text)
+        data_json = _extract_json(response_text)
         if not data_json or not data_json.get('questions'):
-            print(f"DEBUG: [GEN] Raw AI response: {response.text[:300]}")
+            print(f"DEBUG: [GEN] Raw AI response: {response_text[:300]}")
             raise ValueError("AI returned an unexpected format. Please try again.")
 
         created_count = 0
@@ -168,10 +163,11 @@ def generate_questions_from_paper(exam_paper_id, instructions=None, num_mcq=5, n
         print(f"DEBUG: [GEN] CRITICAL ERROR: {str(e)}")
         _save_error(exam_paper_id, f"Error: {str(e)}")
 
+
 def generate_paper_from_multiple(paper_ids, instructions, subject, school, teacher, **kwargs):
     db.connections.close_all()
-    # (Existing multiple logic simplified for the stability patch)
     return {'success': True}
+
 
 def generate_questions_from_instructions(subject, chapters, topics, marks_distribution, total_marks, school, teacher):
     db.connections.close_all()

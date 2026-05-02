@@ -1,6 +1,6 @@
 """
-AI grading module using Google Gemini API.
-MCQs are auto-graded instantly. SHORT/LONG answers are graded via Gemini Flash.
+AI grading module using Anthropic Claude API.
+MCQs are auto-graded instantly. SHORT/LONG answers are graded via Claude Haiku.
 """
 import json
 import logging
@@ -23,7 +23,7 @@ def grade_mcq(user_answer):
 
 
 def grade_descriptive_with_ai(user_answer):
-    """Grade a SHORT or LONG answer using Claude Sonnet."""
+    """Grade a SHORT or LONG answer using Claude Haiku."""
     question = user_answer.question
 
     if not user_answer.text_answer.strip():
@@ -34,16 +34,14 @@ def grade_descriptive_with_ai(user_answer):
         user_answer.save()
         return
 
-    api_key = settings.GEMINI_API_KEY
+    api_key = settings.ANTHROPIC_API_KEY
     if not api_key:
-        # Fallback: give partial marks based on answer length
         _fallback_grade(user_answer)
         return
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('models/gemini-2.0-flash')
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
 
         max_marks = question.marks
         prompt = f"""You are grading a student's answer for a 10th standard exam.
@@ -65,16 +63,19 @@ Grade this answer and respond with ONLY valid JSON:
     "key_points_missed": ["<list of key points the student missed>"]
 }}"""
 
-        response = model.generate_content(prompt)
+        response = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=1024,
+            messages=[{'role': 'user', 'content': prompt}]
+        )
 
-        response_text = response.text.strip()
+        response_text = response.content[0].text.strip()
         if response_text.startswith('```'):
             response_text = response_text[response_text.find('\n') + 1:]
             if response_text.endswith('```'):
                 response_text = response_text[:-3]
             response_text = response_text.strip()
 
-        # Parse JSON from response
         result = json.loads(response_text)
 
         score = min(float(result.get('score', 0)), max_marks)

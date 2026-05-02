@@ -169,8 +169,8 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
 ]
 CORS_ALLOW_CREDENTIALS = True
 
-# Gemini
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+# Anthropic
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 # Login URLs (for template-based views)
 LOGIN_URL = '/accounts/login/'
