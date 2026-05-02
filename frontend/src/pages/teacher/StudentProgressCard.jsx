@@ -196,10 +196,12 @@ export default function StudentProgressCard() {
           ) : (
             /* ── Default banner ── */
             <>
-              <h1 className="text-3xl font-extrabold text-white mb-1">Student Progress Card</h1>
-              <p className="text-indigo-200 text-sm">View performance across subjects for any student</p>
-              <div className="flex flex-wrap gap-3 mt-4">
-                <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm">
+              <div className="flex items-center justify-between gap-4 mb-1">
+                <h1 className="text-3xl font-extrabold text-white">Student Progress Card</h1>
+              </div>
+              <p className="text-indigo-200 text-sm mb-6">View performance across subjects for any student</p>
+              <div className="flex flex-wrap gap-3">
+                <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]">
                   <p className="text-xl font-extrabold text-white">{students.length}</p>
                   <p className="text-white/50 text-xs">Students</p>
                 </div>

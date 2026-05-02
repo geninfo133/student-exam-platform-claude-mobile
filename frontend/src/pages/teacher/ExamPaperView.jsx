@@ -183,51 +183,58 @@ export default function ExamPaperView() {
     <div className="min-h-screen bg-slate-50">
 
       {/* ── Top Banner ── */}
-      <div className="relative bg-gradient-to-r from-slate-900 via-indigo-950 to-purple-950 print:hidden">
-        <div className="absolute inset-0" style={{
-          backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)',
-          backgroundSize: '28px 28px',
-        }} />
-        <div className="relative max-w-5xl mx-auto px-4 py-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link
-              to="/teacher/results"
-              className="w-10 h-10 bg-white/10 hover:bg-white/20 text-white rounded-xl flex items-center justify-center transition border border-white/10"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-            </Link>
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                  paperType === 'handwritten'
-                    ? 'bg-violet-500/30 text-violet-300 border border-violet-400/30'
-                    : 'bg-indigo-500/30 text-indigo-300 border border-indigo-400/30'
-                }`}>
-                  {paperType === 'handwritten' ? '✍️ Handwritten' : '📝 Created Exam'}
-                </span>
-              </div>
-              <h1 className="text-xl font-black text-white">
+      <div className="relative overflow-hidden bg-gradient-to-br from-slate-900 via-indigo-950 to-purple-950 print:hidden">
+        <img src="https://images.unsplash.com/photo-1588072432836-e10032774350?auto=format&fit=crop&w=1400&q=80"
+          alt="" className="absolute inset-0 w-full h-full object-cover opacity-10" />
+        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute -top-20 -right-20 w-80 h-80 rounded-full bg-violet-600/20 blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-10 -left-10 w-60 h-60 rounded-full bg-indigo-600/20 blur-3xl pointer-events-none" />
+
+        <div className="relative max-w-5xl mx-auto px-4 py-10">
+          <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest mb-1">Teacher Portal</p>
+          <div className="flex items-center justify-between gap-4 mb-1">
+            <div className="flex items-center gap-3">
+              <Link
+                to="/teacher/results"
+                className="w-9 h-9 bg-white/10 hover:bg-white/20 text-white rounded-xl flex items-center justify-center transition border border-white/10 shrink-0"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </Link>
+              <h1 className="text-3xl font-extrabold text-white">
                 {exam ? exam.title : 'Question Paper Viewer'}
               </h1>
-              {exam?.subject_name && (
-                <p className="text-slate-400 text-sm mt-0.5">{exam.subject_name}</p>
-              )}
             </div>
+            {exam && !loading && (
+              <button
+                onClick={() => window.print()}
+                className="hidden sm:flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 rounded-xl text-sm font-bold transition shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print
+              </button>
+            )}
           </div>
-
-          {exam && !loading && (
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2 rounded-xl text-sm font-bold transition"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-              </svg>
-              Print
-            </button>
-          )}
+          <p className="text-indigo-200 text-sm mb-6">
+            {paperType === 'handwritten' ? 'Handwritten exam paper' : 'Created exam paper'}
+            {exam?.subject_name ? ` · ${exam.subject_name}` : ''}
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {[
+              { label: 'MCQ',   value: mcqs.length   || '—', color: 'bg-white/10 border-white/20',           text: 'text-white'      },
+              { label: 'Short', value: shorts.length  || '—', color: 'bg-indigo-500/30 border-indigo-400/40', text: 'text-indigo-200' },
+              { label: 'Long',  value: longs.length   || '—', color: 'bg-violet-500/20 border-violet-400/30', text: 'text-violet-200' },
+            ].map(({ label, value, color, text }) => (
+              <div key={label} className={`${color} border rounded-xl px-4 py-2.5 text-center backdrop-blur-sm min-w-[80px]`}>
+                <p className={`text-xl font-extrabold ${text}`}>{value}</p>
+                <p className="text-white/50 text-xs">{label}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
