@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 import { getCategoriesForBoard } from '../../utils/examCategories';
@@ -48,6 +49,7 @@ const inputCls = 'w-full px-4 py-2.5 border-2 border-gray-100 rounded-xl bg-gray
 
 export default function StudentProgressCard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const boardCategories = getCategoriesForBoard(user?.board);
 
   const [students, setStudents]               = useState([]);
@@ -119,12 +121,13 @@ export default function StudentProgressCard() {
     const score = Number(r.score || 0);
     const total = Number(r.total_marks || 0);
     return {
-      key:      `${r.subject_id}_${r.exam_category}_${r.source}`,
-      subject:  r.subject_name,
-      category: r.exam_category_display || r.exam_category || '',
+      key:       `${r.subject_id}_${r.exam_category}_${r.source}`,
+      subject:   r.subject_name,
+      category:  r.exam_category_display || r.exam_category || '',
       score, total,
-      pct:  total > 0 ? Math.round((score / total) * 100) : 0,
-      source: r.source,
+      pct:       total > 0 ? Math.round((score / total) * 100) : 0,
+      source:    r.source,
+      result_id: r.result_id,
     };
   }).sort((a, b) => a.subject.localeCompare(b.subject) || a.category.localeCompare(b.category));
 
@@ -398,8 +401,20 @@ export default function StudentProgressCard() {
               <tbody className="divide-y divide-gray-50">
                 {rows.map((row, idx) => {
                   const grade = gradeBadge(row.pct);
+                  const handleRowClick = () => {
+                    if (!row.result_id) return;
+                    if (row.source === 'handwritten') {
+                      navigate(`/handwritten-result/${row.result_id}`);
+                    } else {
+                      navigate(`/result/${row.result_id}`);
+                    }
+                  };
                   return (
-                    <tr key={row.key} className="hover:bg-indigo-50/30 transition-colors">
+                    <tr
+                      key={row.key}
+                      onClick={handleRowClick}
+                      className={`transition-colors ${row.result_id ? 'cursor-pointer hover:bg-indigo-50' : 'hover:bg-indigo-50/30'}`}
+                    >
                       <td className="px-5 py-4 text-gray-400 font-medium">{idx + 1}</td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-2">
@@ -424,6 +439,9 @@ export default function StudentProgressCard() {
                         <span className={`inline-block text-xs font-bold px-2.5 py-1 rounded-lg border ${grade.cls}`}>
                           Grade {grade.label}
                         </span>
+                        {row.result_id && (
+                          <span className="block text-indigo-400 text-xs mt-0.5">View →</span>
+                        )}
                       </td>
                     </tr>
                   );

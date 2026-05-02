@@ -2158,6 +2158,7 @@ class ProgressCardView(generics.GenericAPIView):
         for ue in ue_qs.order_by('subject__name', 'assigned_exam__exam_category', 'completed_at'):
             results.append({
                 'source': 'online',
+                'result_id': ue.id,
                 'subject_id': ue.subject_id,
                 'subject_name': ue.subject.name,
                 'exam_type_name': ue.subject.exam_type.name if ue.subject.exam_type_id else '',
@@ -2188,6 +2189,7 @@ class ProgressCardView(generics.GenericAPIView):
         for hw in hw_qs.order_by('subject__name', 'exam_category', 'created_at'):
             results.append({
                 'source': 'handwritten',
+                'result_id': hw.id,
                 'subject_id': hw.subject_id,
                 'subject_name': hw.subject.name,
                 'exam_type_name': hw.subject.exam_type.name if hw.subject.exam_type_id else '',
