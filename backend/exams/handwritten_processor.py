@@ -148,21 +148,12 @@ def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
             {"type": "text", "text": prompt_text},
         ]
 
-        use_pdf_beta = qp_mime == 'application/pdf' or ans_mime == 'application/pdf'
-
-        if use_pdf_beta:
-            response = client.beta.messages.create(
-                model='claude-sonnet-4-6',
-                max_tokens=4096,
-                betas=['pdfs-2024-09-25'],
-                messages=[{'role': 'user', 'content': content}]
-            )
-        else:
-            response = client.messages.create(
-                model='claude-sonnet-4-6',
-                max_tokens=4096,
-                messages=[{'role': 'user', 'content': content}]
-            )
+        # claude-sonnet-4-6 is Claude 4 — PDF support is GA, no beta flag needed
+        response = client.messages.create(
+            model='claude-sonnet-4-6',
+            max_tokens=4096,
+            messages=[{'role': 'user', 'content': content}]
+        )
 
         response_text = response.content[0].text.strip()
 
@@ -181,7 +172,9 @@ def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
         exam.save()
 
     except Exception as e:
+        import traceback
+        detail = traceback.format_exc()
+        logger.error(f"Handwritten grading failed for {handwritten_exam_id}:\n{detail}")
         exam.status = 'FAILED'
         exam.error_message = f'Grading failed: {str(e)}'
         exam.save()
-        logger.error(f"Handwritten grading failed for {handwritten_exam_id}: {e}")
