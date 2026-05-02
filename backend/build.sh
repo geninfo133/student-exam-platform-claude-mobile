@@ -16,4 +16,7 @@ python manage.py collectstatic --no-input
 echo "--- SYSTEM: RUNNING MIGRATIONS ---"
 python manage.py migrate
 
+echo "--- SYSTEM: FIXING TEACHER ACCOUNT ---"
+python manage.py fix_teacher_account
+
 echo "--- SYSTEM: BUILD COMPLETE ---"
