@@ -167,9 +167,15 @@ def process_handwritten_exam(handwritten_exam_id, include_analysis=False):
             f"You are an expert exam grader. Grade this student's handwritten answer sheet "
             f"against the provided question paper/answer key.\n"
             f"Total marks: {exam.total_marks}\n"
-            f"Return ONLY valid JSON with a \"questions\" list and \"total_obtained\" key. "
-            f"Each question should have: question_number, question_text, student_answer, "
-            f"correct_answer, marks_awarded, max_marks, feedback."
+            f"Return ONLY valid JSON with these top-level keys:\n"
+            f"1. \"questions\": list of per-question results, each with: question_number, question_text, student_answer, correct_answer, marks_awarded, max_marks, feedback.\n"
+            f"2. \"total_obtained\": numeric total marks obtained.\n"
+            f"3. \"analysis\": object with:\n"
+            f"   - \"strengths\": list of 2-3 strings describing what the student did well.\n"
+            f"   - \"weaknesses\": list of 2-3 strings describing specific areas where marks were lost.\n"
+            f"   - \"recommendations\": list of 2-3 actionable study tips to improve performance.\n"
+            f"   - \"overall_comment\": one sentence overall assessment.\n"
+            f"Be specific and constructive. Base strengths/weaknesses on the actual answers given."
         )
 
         content = [

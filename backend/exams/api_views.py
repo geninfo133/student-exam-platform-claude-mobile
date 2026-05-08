@@ -958,11 +958,17 @@ class TeacherReviewView(APIView):
         user = request.user
         school = user if user.role == 'school' else user.school
         try:
-            user_exam = UserExam.objects.select_related(
+            qs = UserExam.objects.select_related(
                 'subject', 'chapter', 'user'
             ).prefetch_related(
                 'answers__question'
-            ).get(id=exam_id, school=school)
+            )
+            if school:
+                user_exam = qs.filter(
+                    Q(school=school) | Q(school__isnull=True)
+                ).get(id=exam_id)
+            else:
+                user_exam = qs.get(id=exam_id)
         except UserExam.DoesNotExist:
             return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -2211,3 +2217,138 @@ class ProgressCardView(generics.GenericAPIView):
             },
             'results': results,
         })
+
+
+# ============================================================
+# Mobile: Student Dashboard Stats
+# ============================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def student_dashboard_stats(request):
+    user = request.user
+    total_assigned = AssignedExam.objects.filter(assigned_to=user, is_active=True).count()
+    completed = UserExam.objects.filter(user=user, status='COMPLETED').count()
+    in_progress = UserExam.objects.filter(user=user, status='IN_PROGRESS').count()
+    return Response({
+        'total_exams': total_assigned,
+        'completed_exams': completed,
+        'pending_exams': max(0, total_assigned - completed - in_progress),
+    })
+
+
+# ============================================================
+# Mobile: Start or Resume Assigned Exam
+# ============================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def mobile_start_exam(request, assigned_exam_id):
+    """Start or resume an assigned exam. Returns exam_id + questions."""
+    user = request.user
+    try:
+        assigned_exam = AssignedExam.objects.get(
+            id=assigned_exam_id, assigned_to=user, is_active=True,
+        )
+    except AssignedExam.DoesNotExist:
+        return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check for existing attempt
+    existing = UserExam.objects.filter(user=user, assigned_exam=assigned_exam).first()
+    if existing:
+        if existing.status == 'COMPLETED':
+            return Response({'error': 'Exam already submitted', 'exam_id': existing.id}, status=status.HTTP_400_BAD_REQUEST)
+        # Resume in-progress exam
+        questions = [ua.question for ua in existing.answers.select_related('question').all()]
+        saved_answers = {ua.question_id: ua.selected_answer for ua in existing.answers.all() if ua.selected_answer}
+        return Response({
+            'exam_id': existing.id,
+            'title': assigned_exam.title,
+            'subject_name': assigned_exam.subject.name,
+            'total_marks': assigned_exam.total_marks,
+            'duration_minutes': assigned_exam.duration_minutes,
+            'questions': QuestionSerializer(questions, many=True).data,
+            'saved_answers': saved_answers,
+        })
+
+    # Start new exam
+    subject = assigned_exam.subject
+    school = user.school or (user if user.role == 'school' else None)
+
+    if assigned_exam.selection_mode == 'manual' and assigned_exam.selected_questions.exists():
+        questions = list(assigned_exam.selected_questions.all())
+    else:
+        num_mcq = assigned_exam.num_mcq or 20
+        num_short = assigned_exam.num_short or 0
+        num_long = assigned_exam.num_long or 0
+        qs = Question.objects.filter(subject=subject, is_active=True)
+        if school:
+            qs = qs.filter(school=school)
+        mcq_qs = list(qs.filter(question_type='MCQ').order_by('?')[:num_mcq])
+        short_qs = list(qs.filter(question_type='SHORT').order_by('?')[:num_short]) if num_short else []
+        long_qs = list(qs.filter(question_type='LONG').order_by('?')[:num_long]) if num_long else []
+        questions = mcq_qs + short_qs + long_qs
+
+    if not questions:
+        return Response({'error': 'No questions available for this exam'}, status=status.HTTP_400_BAD_REQUEST)
+
+    total_time = assigned_exam.duration_minutes * 60 if assigned_exam.duration_minutes else 1800
+
+    user_exam = UserExam.objects.create(
+        user=user,
+        subject=subject,
+        school=school,
+        assigned_exam=assigned_exam,
+        status='IN_PROGRESS',
+        started_at=timezone.now(),
+        total_questions=len(questions),
+        total_time_seconds=total_time,
+    )
+    for q in questions:
+        UserAnswer.objects.create(user_exam=user_exam, question=q)
+
+    return Response({
+        'exam_id': user_exam.id,
+        'title': assigned_exam.title,
+        'subject_name': subject.name,
+        'total_marks': assigned_exam.total_marks,
+        'duration_minutes': assigned_exam.duration_minutes,
+        'questions': QuestionSerializer(questions, many=True).data,
+        'saved_answers': {},
+    }, status=status.HTTP_201_CREATED)
+
+
+# ============================================================
+# Mobile: Batch Submit Exam
+# ============================================================
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def mobile_submit_exam(request):
+    """Submit exam with all answers at once. Body: {exam_id, answers: [{question_id, selected_option}]}"""
+    exam_id = request.data.get('exam_id')
+    answers_data = request.data.get('answers', [])
+
+    try:
+        user_exam = UserExam.objects.get(id=exam_id, user=request.user, status='IN_PROGRESS')
+    except UserExam.DoesNotExist:
+        return Response({'error': 'Exam not found or already submitted'}, status=status.HTTP_404_NOT_FOUND)
+
+    for ans in answers_data:
+        q_id = ans.get('question_id')
+        selected = ans.get('selected_option') or ans.get('selected_answer') or ''
+        if q_id and selected:
+            UserAnswer.objects.filter(user_exam=user_exam, question_id=q_id).update(
+                selected_answer=selected
+            )
+
+    user_exam.status = 'COMPLETED'
+    user_exam.completed_at = timezone.now()
+    user_exam.grading_status = 'PENDING_REVIEW'
+    user_exam.save()
+
+    return Response({
+        'message': 'Exam submitted. Your teacher will review and grade it.',
+        'exam_id': user_exam.id,
+        'total_marks': user_exam.assigned_exam.total_marks if user_exam.assigned_exam else 0,
+    })

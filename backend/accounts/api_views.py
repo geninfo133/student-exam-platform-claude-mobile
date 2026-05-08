@@ -2,6 +2,8 @@ from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes as perm_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
+from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
 
 from .serializers import (
@@ -12,6 +14,33 @@ from .serializers import (
 from .permissions import IsSchoolUser, IsSchoolOrTeacher, IsTeacherUser
 
 User = get_user_model()
+
+
+class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        u = self.user
+        school_name = ''
+        if u.role == 'school':
+            school_name = u.school_name or u.username
+        elif u.school:
+            school_name = u.school.school_name or u.school.username
+        data['user'] = {
+            'id': u.id,
+            'username': u.username,
+            'first_name': u.first_name,
+            'last_name': u.last_name,
+            'email': u.email,
+            'role': u.role,
+            'school_name': school_name,
+            'grade': u.grade or '',
+            'section': u.section or '',
+        }
+        return data
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    serializer_class = CustomTokenObtainPairSerializer
 
 
 class RegisterView(generics.CreateAPIView):

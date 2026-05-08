@@ -18,7 +18,7 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 if not ALLOWED_HOSTS or ALLOWED_HOSTS == ['']:
     ALLOWED_HOSTS = ['student-exam-backend.onrender.com']
-ALLOWED_HOSTS += ['healthcheck.railway.app', '.railway.app', '.up.railway.app', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS += ['healthcheck.railway.app', '.railway.app', '.up.railway.app', 'localhost', '127.0.0.1', '192.168.0.103']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -89,8 +89,8 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('DB_NAME', 'student-exam-db'),
-            'USER': os.environ.get('DB_USER', 'hani'),
+            'NAME': os.environ.get('DB_NAME', 'student_exam_db'),
+            'USER': os.environ.get('DB_USER', 'gen'),
             'PASSWORD': os.environ.get('DB_PASSWORD', ''),
             'HOST': os.environ.get('DB_HOST', 'localhost'),
             'PORT': os.environ.get('DB_PORT', '5432'),

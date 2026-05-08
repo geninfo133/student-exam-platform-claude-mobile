@@ -1,0 +1,13 @@
+{
+  "name": "student-exam-platform",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "cd mobile && npx expo start",
+    "android": "cd mobile && npx expo start --android",
+    "ios": "cd mobile && npx expo start --ios",
+    "web": "cd mobile && npx expo start --web",
+    "start:frontend": "cd frontend && npm run dev",
+    "start:backend": "cd backend && python manage.py runserver"
+  }
+}

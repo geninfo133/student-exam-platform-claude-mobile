@@ -6,10 +6,11 @@ from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.static import serve
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from accounts.api_views import (
     RegisterView, ProfileView,
+    CustomTokenObtainPairView,
     SchoolCreateTeacherView, SchoolCreateStudentView,
     SchoolMembersListView, TeacherStudentListView,
     UpdateMemberView, DeleteMemberView, site_images_view,
@@ -40,6 +41,7 @@ from exams.api_views import (
     PendingReviewListView,
     TeacherQuestionListView,
     ProgressCardView,
+    student_dashboard_stats, mobile_start_exam, mobile_submit_exam,
 )
 
 urlpatterns = [
@@ -47,7 +49,7 @@ urlpatterns = [
 
     # JWT Auth
     path('api/auth/register/', RegisterView.as_view(), name='api-register'),
-    path('api/auth/login/', TokenObtainPairView.as_view(), name='api-login'),
+    path('api/auth/login/', CustomTokenObtainPairView.as_view(), name='api-login'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='api-refresh'),
     path('api/auth/profile/', ProfileView.as_view(), name='api-profile'),
 
@@ -131,6 +133,13 @@ urlpatterns = [
     path('api/site-images/', site_images_view, name='api-site-images'),
     path('api/site-images/upload/', site_image_upload_view, name='api-site-image-upload'),
     path('api/site-images/<int:pk>/', site_image_delete_view, name='api-site-image-delete'),
+
+    # Mobile-friendly aliases
+    path('api/dashboard/', student_dashboard_stats, name='api-student-dashboard'),
+    path('api/assigned-exams/', StudentAssignedExamsView.as_view(), name='api-mobile-assigned-exams'),
+    path('api/assigned-exams/<int:assigned_exam_id>/start/', mobile_start_exam, name='api-mobile-start-exam'),
+    path('api/my-results/', ExamHistoryView.as_view(), name='api-mobile-my-results'),
+    path('api/submit-exam/', mobile_submit_exam, name='api-mobile-submit-exam'),
 ]
 
 # Manual media serving for production visibility
