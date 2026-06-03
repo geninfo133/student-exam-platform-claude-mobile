@@ -5,8 +5,20 @@ Django settings for exam_platform project.
 from pathlib import Path
 from datetime import timedelta
 import os
+import socket
 import dj_database_url
 from dotenv import load_dotenv
+
+
+def _local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return None
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
@@ -18,7 +30,10 @@ DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 if not ALLOWED_HOSTS or ALLOWED_HOSTS == ['']:
     ALLOWED_HOSTS = ['student-exam-backend.onrender.com']
-ALLOWED_HOSTS += ['healthcheck.railway.app', '.railway.app', '.up.railway.app', 'localhost', '127.0.0.1', '192.168.0.103']
+ALLOWED_HOSTS += ['healthcheck.railway.app', '.railway.app', '.up.railway.app', 'localhost', '127.0.0.1', '10.0.2.2']
+_ip = _local_ip()
+if _ip:
+    ALLOWED_HOSTS.append(_ip)
 
 INSTALLED_APPS = [
     'django.contrib.admin',

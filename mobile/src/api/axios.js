@@ -1,7 +1,17 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
-const BASE_URL = 'http://192.168.0.103:8000';
+// In Expo dev builds, hostUri is like "192.168.0.104:8081" — extract just the IP.
+// Falls back to 10.0.2.2 (Android emulator host alias) if not available.
+function getBaseUrl() {
+  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.debuggerHost || '';
+  const ip = hostUri.split(':')[0];
+  if (ip && ip !== 'localhost') return `http://${ip}:8000`;
+  return 'http://10.0.2.2:8000';
+}
+
+const BASE_URL = getBaseUrl();
 
 const api = axios.create({ baseURL: BASE_URL, timeout: 10000 });
 
