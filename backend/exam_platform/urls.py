@@ -8,13 +8,17 @@ from django.conf.urls.static import static
 from django.views.static import serve
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from study_material.views import (
+    StudyMaterialListView, StudyMaterialCreateView,
+    StudyMaterialUpdateView, StudyMaterialDeleteView,
+)
 from accounts.api_views import (
     RegisterView, ProfileView,
-    CustomTokenObtainPairView,
     SchoolCreateTeacherView, SchoolCreateStudentView,
     SchoolMembersListView, TeacherStudentListView,
     UpdateMemberView, DeleteMemberView, site_images_view,
     site_image_upload_view, site_image_delete_view,
+    CustomTokenObtainPairView,
 )
 from exams.api_views import (
     ExamTypeListView, SubjectListView, ChapterListView,
@@ -129,10 +133,11 @@ urlpatterns = [
     # Progress card
     path('api/progress-card/', ProgressCardView.as_view(), name='api-progress-card'),
 
-    # Site images
-    path('api/site-images/', site_images_view, name='api-site-images'),
-    path('api/site-images/upload/', site_image_upload_view, name='api-site-image-upload'),
-    path('api/site-images/<int:pk>/', site_image_delete_view, name='api-site-image-delete'),
+    # Study materials
+    path('api/study-materials/', StudyMaterialListView.as_view(), name='api-study-material-list'),
+    path('api/study-materials/create/', StudyMaterialCreateView.as_view(), name='api-study-material-create'),
+    path('api/study-materials/<int:pk>/update/', StudyMaterialUpdateView.as_view(), name='api-study-material-update'),
+    path('api/study-materials/<int:pk>/delete/', StudyMaterialDeleteView.as_view(), name='api-study-material-delete'),
 
     # Mobile-friendly aliases
     path('api/dashboard/', student_dashboard_stats, name='api-student-dashboard'),
@@ -140,6 +145,11 @@ urlpatterns = [
     path('api/assigned-exams/<int:assigned_exam_id>/start/', mobile_start_exam, name='api-mobile-start-exam'),
     path('api/my-results/', ExamHistoryView.as_view(), name='api-mobile-my-results'),
     path('api/submit-exam/', mobile_submit_exam, name='api-mobile-submit-exam'),
+
+    # Site images
+    path('api/site-images/', site_images_view, name='api-site-images'),
+    path('api/site-images/upload/', site_image_upload_view, name='api-site-image-upload'),
+    path('api/site-images/<int:pk>/', site_image_delete_view, name='api-site-image-delete'),
 ]
 
 # Manual media serving for production visibility

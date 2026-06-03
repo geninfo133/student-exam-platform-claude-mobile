@@ -6,23 +6,24 @@ import api from '../api/axios';
 const QUICK_ACTIONS = [
   {
     label: 'Start New Exam',
-    desc: 'Browse subjects & chapters',
-    to: '/subjects',
+    desc: 'Take your assigned exams',
+    to: '/assigned-exams',
     gradient: 'from-indigo-500 to-blue-600',
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
   {
-    label: 'Assigned Exams',
-    desc: 'View pending assignments',
-    to: '/assigned-exams',
+    label: 'Study Materials',
+    desc: 'Browse subjects & chapters',
+    to: '/subjects',
     gradient: 'from-violet-500 to-purple-600',
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
       </svg>
     ),
   },
@@ -157,7 +158,7 @@ export default function Dashboard() {
             <h1 className="text-3xl font-extrabold text-white">Welcome back, {userName}!</h1>
             <div className="hidden sm:flex gap-3 shrink-0">
               <Link
-                to="/subjects"
+                to="/assigned-exams"
                 className="inline-flex items-center gap-2 bg-white text-indigo-700 px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-50 transition shadow-lg"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -326,7 +327,7 @@ export default function Dashboard() {
                 <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl">📋</div>
                 <p className="font-bold text-gray-700 mb-1">No exams yet</p>
                 <p className="text-gray-400 text-sm mb-4">Start your first exam to see results here.</p>
-                <Link to="/subjects" className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 transition">
+                <Link to="/assigned-exams" className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-700 transition">
                   Start Exam
                 </Link>
               </div>

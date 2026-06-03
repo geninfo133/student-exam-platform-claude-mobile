@@ -2,9 +2,9 @@ from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes as perm_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
+from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from django.contrib.auth import get_user_model
 
 from .serializers import (
     RegisterSerializer, UserProfileSerializer,

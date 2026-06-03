@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
 
@@ -42,6 +42,14 @@ export default function ManageSubjects() {
   const [expandedSubject, setExpandedSubject] = useState(null);
   const [deleting, setDeleting] = useState(null);
 
+  // Study material state
+  const [materials, setMaterials] = useState({});
+  const [materialForChapter, setMaterialForChapter] = useState(null);
+  const [materialForm, setMaterialForm] = useState({ title: '', file: null });
+  const [uploadingMaterial, setUploadingMaterial] = useState(false);
+  const [deletingMaterial, setDeletingMaterial] = useState(null);
+  const fileInputRef = useRef(null);
+
   const showMsg = (text, type = 'success') => { setMessage({ text, type }); setTimeout(() => setMessage({ text: '', type: '' }), 4000); };
 
   const fetchSubjects = async () => {
@@ -55,11 +63,28 @@ export default function ManageSubjects() {
     catch (err) { console.error(err); }
   };
 
+  const fetchMaterials = async (chapterId) => {
+    try {
+      const res = await api.get('/api/study-materials/', { params: { chapter: chapterId } });
+      setMaterials(prev => ({ ...prev, [chapterId]: res.data.results || res.data }));
+    } catch (err) { console.error(err); }
+  };
+
   useEffect(() => { fetchSubjects(); }, []);
 
   const toggleExpand = (subjectId) => {
     if (expandedSubject === subjectId) { setExpandedSubject(null); }
     else { setExpandedSubject(subjectId); if (!chapters[subjectId]) fetchChapters(subjectId); }
+  };
+
+  const toggleMaterials = (chapterId) => {
+    if (materialForChapter === chapterId) {
+      setMaterialForChapter(null);
+    } else {
+      setMaterialForChapter(chapterId);
+      setMaterialForm({ title: '', file: null });
+      if (!materials[chapterId]) fetchMaterials(chapterId);
+    }
   };
 
   const handleCreateSubject = async (e) => {
@@ -110,6 +135,34 @@ export default function ManageSubjects() {
     try { await api.patch(`/api/chapters/${chapterId}/update/`, editChapterForm); showMsg('Chapter updated!'); setEditingChapterId(null); fetchChapters(subjectId); }
     catch (err) { showMsg(err.response?.data?.error || 'Failed to update chapter.', 'error'); }
     finally { setSavingChapter(false); }
+  };
+
+  const handleUploadMaterial = async (e, chapterId) => {
+    e.preventDefault();
+    if (!materialForm.file) { showMsg('Please select a PDF file.', 'error'); return; }
+    setUploadingMaterial(true);
+    try {
+      const fd = new FormData();
+      fd.append('chapter', chapterId);
+      fd.append('title', materialForm.title);
+      fd.append('file', materialForm.file);
+      await api.post('/api/study-materials/create/', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      showMsg('Material uploaded!');
+      setMaterialForm({ title: '', file: null });
+      fetchMaterials(chapterId);
+    } catch (err) { showMsg(err.response?.data?.detail || 'Upload failed.', 'error'); }
+    finally { setUploadingMaterial(false); }
+  };
+
+  const handleDeleteMaterial = async (chapterId, materialId) => {
+    if (!window.confirm('Delete this material?')) return;
+    setDeletingMaterial(materialId);
+    try {
+      await api.delete(`/api/study-materials/${materialId}/delete/`);
+      showMsg('Material deleted.');
+      fetchMaterials(chapterId);
+    } catch { showMsg('Failed to delete material.', 'error'); }
+    finally { setDeletingMaterial(null); }
   };
 
   if (loading) return (
@@ -324,6 +377,12 @@ export default function ManageSubjects() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => toggleMaterials(ch.id)}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition ${materialForChapter === ch.id ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'text-emerald-600 hover:bg-emerald-50 border-emerald-100'}`}
+                                >
+                                  {materialForChapter === ch.id ? 'Hide' : 'Materials'}
+                                </button>
                                 <button onClick={() => { setEditingChapterId(ch.id); setEditChapterForm({ name: ch.name, code: ch.code }); }} className="px-2.5 py-1 rounded-lg text-indigo-600 text-xs font-semibold hover:bg-indigo-50 border border-indigo-100 transition">Edit</button>
                                 <button onClick={() => handleDeleteChapter(subject.id, ch.id)} disabled={deleting === `chapter-${ch.id}`} className="px-2.5 py-1 rounded-lg text-red-500 text-xs font-semibold hover:bg-red-50 border border-gray-100 transition disabled:opacity-50">
                                   {deleting === `chapter-${ch.id}` ? '…' : 'Delete'}
@@ -350,6 +409,75 @@ export default function ManageSubjects() {
                                     <button onClick={() => setEditingChapterId(null)} className="px-3 py-2.5 rounded-xl border-2 border-gray-200 text-gray-600 text-xs font-semibold hover:bg-gray-50">Cancel</button>
                                   </div>
                                 </div>
+                              </div>
+                            )}
+
+                            {/* Study Materials Panel */}
+                            {materialForChapter === ch.id && (
+                              <div className="border-t border-gray-100 bg-emerald-50/30 px-4 py-4">
+                                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Study Materials</p>
+
+                                {/* Upload Form */}
+                                <form onSubmit={e => handleUploadMaterial(e, ch.id)} className="bg-white rounded-xl border border-gray-200 p-3 mb-3 space-y-2">
+                                  <input
+                                    type="text"
+                                    value={materialForm.title}
+                                    onChange={e => setMaterialForm(f => ({ ...f, title: e.target.value }))}
+                                    required
+                                    placeholder="Material title (e.g. Chapter Notes)"
+                                    className={COMPACT_INPUT}
+                                  />
+                                  <div className="flex items-center gap-3">
+                                    <input
+                                      ref={fileInputRef}
+                                      type="file"
+                                      accept=".pdf"
+                                      style={{ display: 'none' }}
+                                      onChange={e => setMaterialForm(f => ({ ...f, file: e.target.files[0] || null }))}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => fileInputRef.current.click()}
+                                      className="flex-1 flex items-center gap-2 px-3 py-2 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-emerald-400 transition bg-gray-50 text-sm text-gray-500 text-left"
+                                    >
+                                      <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                      </svg>
+                                      <span className="truncate">{materialForm.file ? materialForm.file.name : 'Choose PDF file'}</span>
+                                    </button>
+                                    <button type="submit" disabled={uploadingMaterial} className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white text-xs font-semibold disabled:opacity-50 shrink-0">
+                                      {uploadingMaterial ? 'Uploading…' : 'Upload'}
+                                    </button>
+                                  </div>
+                                </form>
+
+                                {/* Materials List */}
+                                {!materials[ch.id] ? (
+                                  <div className="flex justify-center py-2"><div className="animate-spin rounded-full h-5 w-5 border-2 border-emerald-500 border-t-transparent" /></div>
+                                ) : materials[ch.id].length === 0 ? (
+                                  <p className="text-xs text-gray-400 py-1">No materials uploaded yet.</p>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    {materials[ch.id].map(mat => (
+                                      <div key={mat.id} className="flex items-center justify-between bg-white rounded-xl px-3 py-2 border border-gray-100">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <svg className="w-4 h-4 text-red-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                                          </svg>
+                                          <span className="text-xs font-medium text-gray-700 truncate">{mat.title}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                                          {mat.file && (
+                                            <a href={mat.file} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 font-semibold hover:underline">View</a>
+                                          )}
+                                          <button onClick={() => handleDeleteMaterial(ch.id, mat.id)} disabled={deletingMaterial === mat.id} className="text-xs text-red-500 font-semibold hover:text-red-700 disabled:opacity-50">
+                                            {deletingMaterial === mat.id ? '…' : 'Delete'}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

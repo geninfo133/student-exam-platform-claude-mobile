@@ -149,6 +149,7 @@ export default function SchoolDashboard() {
       change: 'Active this term',
       color: 'from-emerald-500 to-teal-600',
       shadow: 'shadow-emerald-100',
+      link: '/school/exams',
       icon: (
         <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
@@ -161,6 +162,7 @@ export default function SchoolDashboard() {
       change: 'In question bank',
       color: 'from-amber-500 to-orange-600',
       shadow: 'shadow-amber-100',
+      link: '/teacher/papers',
       icon: (
         <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 12h10" />

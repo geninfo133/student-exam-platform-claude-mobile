@@ -82,8 +82,8 @@ class SubjectListView(generics.ListAPIView):
         user = self.request.user
         school = user if user.role == 'school' else user.school
         qs = Subject.objects.filter(is_active=True).annotate(
-            chapter_count=Count('chapters'),
-            question_count=Count('questions'),
+            chapter_count=Count('chapters', distinct=True),
+            question_count=Count('questions', distinct=True),
         )
         
         if school:
@@ -1227,7 +1227,9 @@ class SchoolDashboardStatsView(APIView):
         school = request.user
         teachers_count = User.objects.filter(school=school, role='teacher').count()
         students_count = User.objects.filter(school=school, role='student').count()
-        exams_count = UserExam.objects.filter(school=school, status='COMPLETED').count()
+        exams_count = AssignedExam.objects.filter(
+            Q(school=school) | Q(teacher__school=school)
+        ).distinct().count()
         papers_count = ExamPaper.objects.filter(school=school).count()
 
         recent_activity = UserExam.objects.filter(
@@ -2253,12 +2255,10 @@ def mobile_start_exam(request, assigned_exam_id):
     except AssignedExam.DoesNotExist:
         return Response({'error': 'Exam not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # Check for existing attempt
     existing = UserExam.objects.filter(user=user, assigned_exam=assigned_exam).first()
     if existing:
         if existing.status == 'COMPLETED':
             return Response({'error': 'Exam already submitted', 'exam_id': existing.id}, status=status.HTTP_400_BAD_REQUEST)
-        # Resume in-progress exam
         questions = [ua.question for ua in existing.answers.select_related('question').all()]
         saved_answers = {ua.question_id: ua.selected_answer for ua in existing.answers.all() if ua.selected_answer}
         return Response({
@@ -2271,7 +2271,6 @@ def mobile_start_exam(request, assigned_exam_id):
             'saved_answers': saved_answers,
         })
 
-    # Start new exam
     subject = assigned_exam.subject
     school = user.school or (user if user.role == 'school' else None)
 

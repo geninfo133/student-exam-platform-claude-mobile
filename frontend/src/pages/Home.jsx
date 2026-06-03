@@ -19,38 +19,6 @@ const ORG_TYPES = [
       </svg>
     ),
   },
-  {
-    key: 'college',
-    title: 'College',
-    description: 'Scalable assessment solutions for higher education.',
-    color: 'from-fuchsia-500 to-purple-700',
-    shadow: 'shadow-purple-200',
-    badge: 'bg-purple-50 text-purple-700',
-    border: 'hover:border-purple-400',
-    link: 'text-purple-600',
-    tag: 'Higher Education',
-    icon: (
-      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
-      </svg>
-    ),
-  },
-  {
-    key: 'coaching',
-    title: 'Coaching Centre',
-    description: 'Optimized for EAMCET, NEET, and JEE preparation.',
-    color: 'from-amber-400 to-orange-600',
-    shadow: 'shadow-orange-200',
-    badge: 'bg-orange-50 text-orange-700',
-    border: 'hover:border-orange-400',
-    link: 'text-orange-600',
-    tag: 'Competitive Exams',
-    icon: (
-      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-      </svg>
-    ),
-  },
 ];
 
 const FEATURES = [
@@ -121,7 +89,7 @@ const HOW_IT_WORKS = [
   {
     step: '01',
     title: 'Register Your Institution',
-    desc: 'Sign up as a School, College, or Coaching Centre. Set up your classes, subjects, and student roster in minutes.',
+    desc: 'Sign up as a School. Set up your classes, subjects, and student roster in minutes.',
     color: 'from-blue-500 to-indigo-600',
     bg: 'bg-blue-50',
   },
@@ -204,9 +172,6 @@ export default function Home() {
         <HeroBg />
         <div className="absolute bottom-0 left-0 w-full h-28 bg-gradient-to-t from-slate-50 to-transparent z-10" />
         <div className="relative z-20 max-w-7xl mx-auto text-center">
-          <span className="inline-block px-4 py-1.5 rounded-full bg-indigo-500/20 text-indigo-300 text-sm font-bold tracking-wide uppercase mb-6 border border-indigo-500/30 backdrop-blur-sm">
-            Powered by Gemini 2.0 AI
-          </span>
           <h1 className="text-5xl md:text-7xl font-black text-white mb-6 tracking-tight leading-[1.1]">
             Next Gen{' '}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">
@@ -251,12 +216,12 @@ export default function Home() {
           </div>
 
           {!selected ? (
-            <div className="grid md:grid-cols-3 gap-8">
+            <div className="flex justify-center">
               {ORG_TYPES.map((org) => (
                 <button
                   key={org.key}
                   onClick={() => setSelected(org.key)}
-                  className={`group relative bg-white rounded-3xl shadow-xl ${org.shadow} p-8 flex flex-col items-center text-center cursor-pointer border-2 border-transparent ${org.border} transition-all duration-300 hover:-translate-y-2`}
+                  className={`group relative bg-white rounded-3xl shadow-xl ${org.shadow} p-8 flex flex-col items-center text-center cursor-pointer border-2 border-transparent ${org.border} transition-all duration-300 hover:-translate-y-2 w-full max-w-sm`}
                 >
                   <span className={`text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full ${org.badge} mb-5`}>
                     {org.tag}
@@ -340,11 +305,11 @@ export default function Home() {
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             {HOW_IT_WORKS.map((s, i) => (
-              <div key={i} className="relative">
+              <div key={i} className="relative flex">
                 {i < HOW_IT_WORKS.length - 1 && (
                   <div className="hidden lg:block absolute top-10 left-full w-full h-0.5 bg-white/10 z-0" style={{ width: 'calc(100% - 2.5rem)', left: '80%' }} />
                 )}
-                <div className={`${s.bg} rounded-3xl p-8 relative z-10`}>
+                <div className={`${s.bg} rounded-3xl p-8 relative z-10 w-full`}>
                   <div className={`text-5xl font-black bg-gradient-to-br ${s.color} bg-clip-text text-transparent mb-4`}>
                     {s.step}
                   </div>
@@ -353,26 +318,6 @@ export default function Home() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── CTA Banner ── */}
-      <section className="py-20 px-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600">
-        <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight">
-            Ready to Transform Your Institution?
-          </h2>
-          <p className="text-indigo-100 text-xl mb-10">
-            Join 500+ institutions already using AI to save time, improve accuracy, and boost student outcomes.
-          </p>
-          <div className="flex flex-wrap gap-4 justify-center">
-            <Link to="/register?org_type=school" className="px-8 py-4 bg-white text-indigo-700 rounded-2xl font-black text-lg hover:bg-indigo-50 transition-all shadow-2xl hover:-translate-y-1">
-              Start Free Today
-            </Link>
-            <Link to="/login" className="px-8 py-4 bg-white/10 text-white border-2 border-white/30 rounded-2xl font-bold text-lg hover:bg-white/20 transition-all">
-              Sign In
-            </Link>
           </div>
         </div>
       </section>

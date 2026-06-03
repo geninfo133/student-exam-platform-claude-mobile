@@ -36,6 +36,7 @@ import ManageStudents from './pages/school/ManageStudents';
 import ManageAssignments from './pages/school/ManageAssignments';
 import ManageSubjects from './pages/school/ManageSubjects';
 import ManageImages from './pages/school/ManageImages';
+import SchoolExamsList from './pages/school/SchoolExamsList';
 import ProgressCard from './pages/ProgressCard';
 import StudentProgressCard from './pages/teacher/StudentProgressCard';
 import CreatedExams from './pages/teacher/CreatedExams';
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="/school/assignments" element={<RoleProtectedRoute allowedRoles={['school']}><ManageAssignments /></RoleProtectedRoute>} />
             <Route path="/school/subjects" element={<RoleProtectedRoute allowedRoles={['school']}><ManageSubjects /></RoleProtectedRoute>} />
             <Route path="/school/images" element={<RoleProtectedRoute allowedRoles={['school']}><ManageImages /></RoleProtectedRoute>} />
+            <Route path="/school/exams" element={<RoleProtectedRoute allowedRoles={['school']}><SchoolExamsList /></RoleProtectedRoute>} />
 
             {/* Coaching Centre Routes (same components, /coaching/ prefix) */}
             <Route path="/coaching/dashboard" element={<RoleProtectedRoute allowedRoles={['school']}><SchoolDashboard /></RoleProtectedRoute>} />
