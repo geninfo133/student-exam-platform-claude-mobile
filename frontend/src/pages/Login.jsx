@@ -1,54 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-
-const ROLES = [
-  {
-    key: 'school',
-    label: 'School',
-    desc: 'Admin login',
-    gradient: 'from-blue-500 to-indigo-600',
-    ring: 'ring-indigo-400',
-    badge: 'bg-indigo-100 text-indigo-700',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-      </svg>
-    ),
-  },
-  {
-    key: 'teacher',
-    label: 'Teacher',
-    desc: 'Manage exams',
-    gradient: 'from-emerald-500 to-teal-600',
-    ring: 'ring-emerald-400',
-    badge: 'bg-emerald-100 text-emerald-700',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-      </svg>
-    ),
-  },
-  {
-    key: 'student',
-    label: 'Student',
-    desc: 'Take exams',
-    gradient: 'from-violet-500 to-purple-700',
-    ring: 'ring-purple-400',
-    badge: 'bg-purple-100 text-purple-700',
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    ),
-  },
-];
-
-const ORG_LABEL = {
-  school:   { label: 'School',          desc: 'School admin login' },
-  college:  { label: 'College',         desc: 'College admin login' },
-  coaching: { label: 'Coaching Centre', desc: 'Coaching admin login' },
-};
 
 const FEATURES = [
   { icon: '⚡', text: 'AI-powered instant grading' },
@@ -58,26 +10,13 @@ const FEATURES = [
 ];
 
 export default function Login() {
-  const [searchParams] = useSearchParams();
-  const orgType    = searchParams.get('org_type');
-  const orgOverride = ORG_LABEL[orgType];
-
-  const visibleRoles = ROLES.map(r =>
-    r.key === 'school' && orgOverride
-      ? { ...r, label: orgOverride.label, desc: orgOverride.desc }
-      : r
-  );
-
-  const [selectedRole, setSelectedRole] = useState('student');
-  const [username, setUsername]         = useState('');
-  const [password, setPassword]         = useState('');
-  const [showPass, setShowPass]         = useState(false);
-  const [error, setError]               = useState('');
-  const [loading, setLoading]           = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
   const { login } = useAuth();
   const navigate  = useNavigate();
-
-  const activeRole = visibleRoles.find(r => r.key === selectedRole);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -101,24 +40,20 @@ export default function Login() {
   return (
     <div className="min-h-screen flex">
 
-      {/* ── Left Panel — Photo ── */}
+      {/* ── Left Panel ── */}
       <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between overflow-hidden">
-        {/* Background image */}
         <img
           src="https://images.unsplash.com/photo-1588072432836-e10032774350?w=1200&q=80&auto=format&fit=crop"
           alt=""
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
-        {/* Dark overlays */}
         <div className="absolute inset-0 bg-black/65" />
         <div className="absolute inset-0 bg-gradient-to-b from-indigo-950/50 via-transparent to-black/70" />
-        {/* Dot grid */}
         <div className="absolute inset-0" style={{
           backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)',
           backgroundSize: '32px 32px',
         }} />
 
-        {/* Top — Brand */}
         <div className="relative z-10 p-10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl flex items-center justify-center">
@@ -128,12 +63,11 @@ export default function Login() {
             </div>
             <div>
               <p className="text-white font-black text-lg leading-none">ExamAI</p>
-              <p className="text-indigo-300 text-xs font-medium">Powered by Gemini 2.0</p>
+              <p className="text-indigo-300 text-xs font-medium">AI Exam Management</p>
             </div>
           </div>
         </div>
 
-        {/* Middle — Headline */}
         <div className="relative z-10 px-10">
           <span className="inline-block px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-300 text-xs font-bold uppercase tracking-widest border border-indigo-400/30 mb-4">
             AI Exam Management
@@ -146,7 +80,6 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Bottom — Features */}
         <div className="relative z-10 p-10">
           <div className="grid grid-cols-2 gap-3">
             {FEATURES.map((f, i) => (
@@ -179,46 +112,6 @@ export default function Login() {
             <p className="text-gray-500 text-sm">Sign in to your account to continue</p>
           </div>
 
-          {/* Role selector */}
-          <div className="grid grid-cols-3 gap-3 mb-8">
-            {visibleRoles.map(role => {
-              const isSelected = selectedRole === role.key;
-              return (
-                <button
-                  key={role.key}
-                  type="button"
-                  onClick={() => { setSelectedRole(role.key); setError(''); }}
-                  className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${
-                    isSelected
-                      ? 'border-transparent shadow-lg scale-[1.03]'
-                      : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
-                  }`}
-                  style={isSelected ? { background: `linear-gradient(135deg, var(--tw-gradient-stops))` } : {}}
-                >
-                  {isSelected && (
-                    <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${role.gradient} opacity-100`} />
-                  )}
-                  <div className={`relative z-10 w-10 h-10 rounded-xl flex items-center justify-center ${
-                    isSelected ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {role.icon}
-                  </div>
-                  <div className="relative z-10 text-center">
-                    <p className={`text-sm font-black ${isSelected ? 'text-white' : 'text-gray-700'}`}>{role.label}</p>
-                    <p className={`text-[10px] ${isSelected ? 'text-white/70' : 'text-gray-400'}`}>{role.desc}</p>
-                  </div>
-                  {isSelected && (
-                    <div className="absolute top-2 right-2 z-10 w-4 h-4 bg-white/30 rounded-full flex items-center justify-center">
-                      <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
           {/* Error */}
           {error && (
             <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl mb-5 text-sm">
@@ -231,7 +124,6 @@ export default function Login() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Username */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Username</label>
               <div className="relative">
@@ -244,14 +136,13 @@ export default function Login() {
                   type="text"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder={`Enter ${activeRole.label.toLowerCase()} username`}
+                  placeholder="Enter your username"
                   required
                   className="w-full pl-11 pr-4 py-3.5 border-2 border-gray-200 rounded-xl text-sm font-medium bg-white focus:outline-none focus:border-indigo-400 transition placeholder-gray-300"
                 />
               </div>
             </div>
 
-            {/* Password */}
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2">Password</label>
               <div className="relative">
@@ -287,11 +178,10 @@ export default function Login() {
               </div>
             </div>
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={loading}
-              className={`w-full py-4 rounded-xl font-black text-white text-sm transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg bg-gradient-to-r ${activeRole.gradient} hover:opacity-90 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98]`}
+              className="w-full py-4 rounded-xl font-black text-white text-sm transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed mt-2 shadow-lg bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-90 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98]"
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">
@@ -302,23 +192,18 @@ export default function Login() {
                   Signing in...
                 </span>
               ) : (
-                `Sign In as ${activeRole.label}`
+                'Sign In'
               )}
             </button>
           </form>
 
-          {/* Register link */}
           <p className="text-center mt-6 text-gray-500 text-sm">
             Don't have an account?{' '}
-            <Link
-              to={orgType ? `/register?org_type=${orgType}` : '/register'}
-              className="font-bold text-indigo-600 hover:text-indigo-700 hover:underline"
-            >
+            <Link to="/register" className="font-bold text-indigo-600 hover:text-indigo-700 hover:underline">
               Register here
             </Link>
           </p>
 
-          {/* Back to home */}
           <div className="text-center mt-3">
             <Link to="/" className="text-xs text-gray-400 hover:text-gray-600 transition">
               ← Back to home
