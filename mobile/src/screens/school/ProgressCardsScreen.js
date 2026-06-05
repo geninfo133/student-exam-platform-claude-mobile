@@ -5,86 +5,46 @@ import {
 } from 'react-native';
 import api from '../../api/axios';
 import { useAuth } from '../../context/AuthContext';
-import { GRADES, getGrade, studentName, deriveProgressAnalysis } from '../../utils/helpers';
+import { getGrade, studentName } from '../../utils/helpers';
 import ScreenHeader from '../../components/ScreenHeader';
 import LoadingScreen from '../../components/LoadingScreen';
 import EmptyState from '../../components/EmptyState';
 import PctBar from '../../components/PctBar';
 import PickerModal from '../../components/PickerModal';
-import AnalysisCard from '../../components/AnalysisCard';
 
-const CATEGORIES = [
-  { id: '', label: 'All Categories' },
-  { id: 'online', label: 'Online Exams' },
-  { id: 'handwritten', label: 'Handwritten' },
-];
-
-function SubjectTable({ title, accent, rows }) {
-  return (
-    <View style={[s.tableCard, { marginBottom: 12 }]}>
-      {/* Section title strip */}
-      <View style={{ backgroundColor: accent, paddingHorizontal: 14, paddingVertical: 10 }}>
-        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 13 }}>{title}</Text>
-      </View>
-      {/* Header */}
-      <View style={[s.tableRow, s.tableHeader]}>
-        <Text style={[s.th, { flex: 2 }]}>Subject</Text>
-        <Text style={[s.th, { width: 65, textAlign: 'right' }]}>Score</Text>
-        <Text style={[s.th, { width: 42, textAlign: 'right' }]}>%</Text>
-        <Text style={[s.th, { width: 32, textAlign: 'center' }]}>Grd</Text>
-      </View>
-      {rows.map((row, i) => {
-        const pct = Math.round(row.percentage);
-        const g = getGrade(pct);
-        return (
-          <View key={i} style={s.tableRow}>
-            <View style={{ flex: 2 }}>
-              <Text style={s.subjectName}>{row.subject_name}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                <PctBar pct={pct} color={accent} />
-                <Text style={{ fontSize: 10, color: '#94a3b8', width: 28, textAlign: 'right' }}>{row.exams_count}ex</Text>
-              </View>
-            </View>
-            <Text style={[s.td, { width: 65 }]}>{row.total_score}/{row.total_marks}</Text>
-            <Text style={[s.td, { width: 42, color: pct >= 60 ? '#10b981' : pct >= 35 ? '#f59e0b' : '#dc2626', fontWeight: '700' }]}>{pct}%</Text>
-            <View style={{ width: 32, alignItems: 'center' }}>
-              <View style={[s.gradeBadge, { backgroundColor: g.bg }]}>
-                <Text style={[s.gradeText, { color: g.color }]}>{g.label}</Text>
-              </View>
-            </View>
-          </View>
-        );
-      })}
-    </View>
-  );
+function gradeBadge(pct) {
+  if (pct >= 90) return { label: 'A+', bg: '#d1fae5', color: '#065f46' };
+  if (pct >= 75) return { label: 'A',  bg: '#d1fae5', color: '#065f46' };
+  if (pct >= 60) return { label: 'B',  bg: '#dbeafe', color: '#1e40af' };
+  if (pct >= 50) return { label: 'C',  bg: '#fef9c3', color: '#854d0e' };
+  if (pct >= 35) return { label: 'D',  bg: '#ffedd5', color: '#9a3412' };
+  return               { label: 'F',  bg: '#fee2e2', color: '#991b1b' };
 }
 
 export default function ProgressCardsScreen({ navigation }) {
   const { user } = useAuth();
   const isSchool = user?.role === 'school';
 
-  const [students, setStudents]         = useState([]);
-  const [selectedStudent, setStudent]   = useState(null);
-  const [studentModal, setStudentModal] = useState(false);
+  const [students, setStudents]             = useState([]);
+  const [studentModal, setStudentModal]     = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [studentSearch, setStudentSearch]   = useState('');
 
-  const [category, setCategory]         = useState(CATEGORIES[0]);
-  const [categoryModal, setCategoryModal] = useState(false);
-
-  const [dateFrom, setDateFrom]         = useState('');
-  const [dateTo, setDateTo]             = useState('');
-
-  const [progress, setProgress]         = useState(null);
-  const [loading, setLoading]           = useState(false);
+  const [results, setResults]               = useState([]);
+  const [studentInfo, setStudentInfo]       = useState(null);
+  const [loading, setLoading]               = useState(false);
   const [studentsLoading, setStudentsLoading] = useState(true);
-  const [refreshing, setRefreshing]     = useState(false);
+  const [refreshing, setRefreshing]         = useState(false);
+  const [searched, setSearched]             = useState(false);
+
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo]     = useState('');
 
   const fetchStudents = useCallback(async () => {
     try {
       const url = isSchool ? '/api/auth/members/?role=student' : '/api/auth/my-students/';
       const res = await api.get(url);
-      const list = res.data?.results || res.data || [];
-      setStudents(list);
-      if (list.length > 0 && !selectedStudent) setStudent(list[0]);
+      setStudents(res.data?.results || res.data || []);
     } catch { }
     finally { setStudentsLoading(false); }
   }, [isSchool]);
@@ -94,75 +54,73 @@ export default function ProgressCardsScreen({ navigation }) {
   const fetchProgress = useCallback(async () => {
     if (!selectedStudent) return;
     setLoading(true);
+    setSearched(true);
     try {
-      const params = new URLSearchParams();
-      params.append('student_id', selectedStudent.id);
-      if (category.id && category.id !== 'handwritten') params.append('exam_category', category.id);
-      if (dateFrom) params.append('date_from', dateFrom);
-      if (dateTo) params.append('date_to', dateTo);
-
-      // Fetch online results and handwritten results in parallel
-      const [onlineRes, hwRes] = await Promise.all([
-        (category.id === 'handwritten') ? Promise.resolve({ data: { results: [] } })
-          : api.get(`/api/progress-card/?${params.toString()}`),
-        (category.id === 'online') ? Promise.resolve({ data: [] })
-          : api.get(`/api/handwritten/?student_id=${selectedStudent.id}`),
-      ]);
-
-      const groupBySubject = (items, keyField = 'subject_name') => {
-        const map = {};
-        items.forEach(r => {
-          const key = r.subject_id || r[keyField] || 'unknown';
-          if (!map[key]) {
-            map[key] = { subject_name: r.subject_name || r[keyField] || 'Unknown', total_score: 0, total_marks: 0, exams_count: 0 };
-          }
-          map[key].total_score += (r.score ?? r.obtained_marks ?? 0);
-          map[key].total_marks += (r.total_marks || 0);
-          map[key].exams_count += 1;
-        });
-        return Object.values(map).map(sub => ({
-          ...sub,
-          percentage: sub.total_marks > 0 ? (sub.total_score / sub.total_marks) * 100 : 0,
-        }));
-      };
-
-      const calcGrand = (subjects) => {
-        const gs = subjects.reduce((a, sub) => a + sub.total_score, 0);
-        const gm = subjects.reduce((a, sub) => a + sub.total_marks, 0);
-        return gm > 0 ? { total_score: gs, total_marks: gm, percentage: (gs / gm) * 100 } : null;
-      };
-
-      const onlineRaw = onlineRes.data?.results || onlineRes.data || [];
-      // Only include GRADED handwritten exams in the progress card
-      const hwRaw = (hwRes.data?.results || hwRes.data || []).filter(e => e.status === 'GRADED');
-
-      const onlineSubjects     = groupBySubject(onlineRaw.filter(r => r.source === 'online' || !r.source));
-      const handwrittenSubjects = groupBySubject(hwRaw);
-      const allRaw = [
-        ...onlineRaw.map(r => ({ ...r, score: r.score || 0 })),
-        ...hwRaw.map(r => ({ ...r, score: r.obtained_marks ?? r.score ?? 0, subject_id: r.subject_id || r.subject_name })),
-      ];
-      const allSubjects = groupBySubject(allRaw);
-
-      setProgress({
-        online: onlineSubjects,
-        handwritten: handwrittenSubjects,
-        subjects: allSubjects,
-        grand_total: calcGrand(allSubjects),
-      });
-    } catch { setProgress(null); }
+      const params = { student_id: selectedStudent.id };
+      if (dateFrom) params.date_from = dateFrom;
+      if (dateTo)   params.date_to   = dateTo;
+      const res = await api.get('/api/progress-card/', { params });
+      setResults(res.data.results || []);
+      setStudentInfo(res.data.student || null);
+    } catch { setResults([]); }
     finally { setLoading(false); setRefreshing(false); }
-  }, [selectedStudent, category, dateFrom, dateTo]);
+  }, [selectedStudent, dateFrom, dateTo]);
 
   useEffect(() => { fetchProgress(); }, [fetchProgress]);
 
-  const subjects = progress?.subjects || [];
-  const grand = progress?.grand_total || null;
-  const progressAnalysis = grand ? deriveProgressAnalysis(progress, grand) : null;
+  const clear = () => {
+    setSelectedStudent(null);
+    setStudentSearch('');
+    setDateFrom('');
+    setDateTo('');
+    setResults([]);
+    setStudentInfo(null);
+    setSearched(false);
+  };
 
-  if (studentsLoading) {
-    return <LoadingScreen color="#4f46e5" />;
+  // Deduplicate: best result per subject+category+source
+  const grid = {};
+  for (const r of results) {
+    const key = `${r.subject_id}_${r.exam_category}_${r.source}`;
+    if (!grid[key] || r.percentage > grid[key].percentage) grid[key] = r;
   }
+  const rows = Object.values(grid).map(r => {
+    const score = Number(r.score || 0);
+    const total = Number(r.total_marks || 0);
+    return {
+      key:       `${r.subject_id}_${r.exam_category}_${r.source}`,
+      subject:   r.subject_name,
+      category:  r.exam_category_display || r.exam_category || '',
+      score, total,
+      pct:       total > 0 ? Math.round((score / total) * 100) : 0,
+      source:    r.source,
+      result_id: r.result_id,
+    };
+  }).sort((a, b) => a.subject.localeCompare(b.subject) || a.category.localeCompare(b.category));
+
+  const grandScore = rows.reduce((s, r) => s + r.score, 0);
+  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+  const grandPct   = grandTotal > 0 ? Math.round((grandScore / grandTotal) * 100) : 0;
+  const grandGrade = gradeBadge(grandPct);
+
+  const passCount  = rows.filter(r => r.pct >= 35).length;
+  const topSubject = rows.length > 0 ? [...rows].sort((a, b) => b.pct - a.pct)[0] : null;
+
+  const filteredStudents = students.filter(s => {
+    const name = `${s.first_name} ${s.last_name} ${s.username}`.toLowerCase();
+    return name.includes(studentSearch.toLowerCase());
+  });
+
+  const handleRowPress = (row) => {
+    if (!row.result_id) return;
+    if (row.source === 'handwritten') {
+      navigation.navigate('ExamPaperView', { paperId: row.result_id, source: 'handwritten' });
+    } else {
+      navigation.navigate('ExamResultDetail', { resultId: row.result_id, type: 'online' });
+    }
+  };
+
+  if (studentsLoading) return <LoadingScreen color="#4f46e5" />;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f8fafc' }}>
@@ -170,215 +128,217 @@ export default function ProgressCardsScreen({ navigation }) {
         navigation={navigation}
         label={isSchool ? 'School Admin' : 'Teacher Portal'}
         title="Progress Cards"
-        subtitle="Student performance summary"
-      />
+        subtitle={searched && studentInfo ? studentInfo.name : 'Student performance summary'}
+      >
+        {searched && studentInfo && rows.length > 0 && (
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {[
+              { label: `${rows.length} Exams`, bg: 'rgba(255,255,255,0.15)' },
+              { label: `${passCount} Passed`,  bg: 'rgba(16,185,129,0.25)' },
+              topSubject && { label: `Best: ${topSubject.subject}`, bg: 'rgba(245,158,11,0.25)' },
+            ].filter(Boolean).map((chip, i) => (
+              <View key={i} style={{ backgroundColor: chip.bg, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }}>
+                <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{chip.label}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </ScreenHeader>
 
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchProgress(); }} tintColor="#4f46e5" />}
       >
-        {/* Filters */}
-        <View style={s.filterCard}>
-          <Text style={s.filterTitle}>Filters</Text>
-
-          {/* Student picker */}
-          <Text style={s.filterLabel}>Student</Text>
-          <TouchableOpacity style={s.pickerBtn} onPress={() => setStudentModal(true)}>
-            <Text style={s.pickerBtnText}>{selectedStudent ? studentName(selectedStudent) : 'Select student…'}</Text>
-            <Text style={{ color: '#94a3b8' }}>▾</Text>
-          </TouchableOpacity>
-
-          {/* Category picker */}
-          <Text style={[s.filterLabel, { marginTop: 12 }]}>Category</Text>
-          <TouchableOpacity style={s.pickerBtn} onPress={() => setCategoryModal(true)}>
-            <Text style={s.pickerBtnText}>{category.label}</Text>
-            <Text style={{ color: '#94a3b8' }}>▾</Text>
-          </TouchableOpacity>
-
-          {/* Date range */}
-          <Text style={[s.filterLabel, { marginTop: 12 }]}>Date Range (YYYY-MM-DD)</Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TextInput
-              style={[s.dateInput, { flex: 1 }]}
-              placeholder="From"
-              value={dateFrom}
-              onChangeText={setDateFrom}
-              onSubmitEditing={fetchProgress}
-              placeholderTextColor="#94a3b8"
-            />
-            <TextInput
-              style={[s.dateInput, { flex: 1 }]}
-              placeholder="To"
-              value={dateTo}
-              onChangeText={setDateTo}
-              onSubmitEditing={fetchProgress}
-              placeholderTextColor="#94a3b8"
-            />
+        {/* Find Student card */}
+        <View style={s.card}>
+          <View style={s.cardHeader}>
+            <View style={s.cardIcon}>
+              <Text style={{ color: '#fff', fontSize: 14 }}>🔍</Text>
+            </View>
+            <Text style={s.cardHeaderText}>Find Student</Text>
           </View>
+          <View style={s.cardBody}>
+            {/* Search input */}
+            <Text style={s.label}>Search by Name</Text>
+            <TextInput
+              style={s.input}
+              placeholder="Type name or username…"
+              placeholderTextColor="#94a3b8"
+              value={studentSearch}
+              onChangeText={setStudentSearch}
+            />
 
-          <TouchableOpacity style={s.applyBtn} onPress={fetchProgress}>
-            <Text style={s.applyBtnText}>Apply Filters</Text>
-          </TouchableOpacity>
+            {/* Student picker */}
+            <Text style={[s.label, { marginTop: 12 }]}>Select Student</Text>
+            <TouchableOpacity style={s.pickerBtn} onPress={() => setStudentModal(true)}>
+              <Text style={[s.pickerBtnText, !selectedStudent && { color: '#94a3b8' }]}>
+                {selectedStudent
+                  ? `${selectedStudent.first_name} ${selectedStudent.last_name}${selectedStudent.grade ? ` (Class ${selectedStudent.grade}${selectedStudent.section || ''})` : ''}`
+                  : '— Select Student —'}
+              </Text>
+              <Text style={{ color: '#94a3b8' }}>▾</Text>
+            </TouchableOpacity>
+
+            {/* Date range */}
+            <Text style={[s.label, { marginTop: 12 }]}>Date Range</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TextInput style={[s.input, { flex: 1 }]} placeholder="From (YYYY-MM-DD)" placeholderTextColor="#94a3b8" value={dateFrom} onChangeText={setDateFrom} />
+              <TextInput style={[s.input, { flex: 1 }]} placeholder="To (YYYY-MM-DD)"   placeholderTextColor="#94a3b8" value={dateTo}   onChangeText={setDateTo}   />
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+              <TouchableOpacity
+                style={[s.primaryBtn, (!selectedStudent || loading) && { opacity: 0.5 }]}
+                onPress={fetchProgress}
+                disabled={!selectedStudent || loading}
+              >
+                <Text style={s.primaryBtnText}>{loading ? 'Loading…' : 'View Progress Card'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.clearBtn} onPress={clear}>
+                <Text style={s.clearBtnText}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
         {/* Results */}
         {loading ? (
           <LoadingScreen color="#4f46e5" />
-        ) : !progress || subjects.length === 0 ? (
-          <EmptyState
-            icon="📊"
-            title="No Data"
-            message={selectedStudent ? 'No exam results found for the selected filters.' : 'Select a student to view progress.'}
-          />
+        ) : !searched ? (
+          <EmptyState icon="🔍" title="Select a Student" message="Search and select a student above to view their progress card." />
+        ) : rows.length === 0 ? (
+          <EmptyState icon="📊" title="No Progress Data" message="No exam results found for the selected filters." />
         ) : (
-          <>
-            {/* Student info strip */}
-            {selectedStudent && (
-              <View style={s.studentStrip}>
-                <View style={s.studentAvatar}>
-                  <Text style={s.studentAvatarText}>{studentName(selectedStudent)[0]?.toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.studentName}>{studentName(selectedStudent)}</Text>
-                  {selectedStudent.grade && <Text style={s.studentMeta}>Class {selectedStudent.grade}{selectedStudent.section}</Text>}
-                </View>
-                {grand && (
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <Text style={s.overallPct}>{Math.round(grand.percentage)}%</Text>
-                    <Text style={{ fontSize: 10, color: '#94a3b8' }}>Overall</Text>
-                  </View>
-                )}
-              </View>
-            )}
+          <View style={s.card}>
+            {/* Table header */}
+            <View style={[s.tableRow, s.tableHead]}>
+              <Text style={[s.th, { width: 24 }]}>#</Text>
+              <Text style={[s.th, { flex: 1 }]}>Subject</Text>
+              <Text style={[s.th, { width: 60 }]}>Exam</Text>
+              <Text style={[s.th, { width: 36, textAlign: 'center' }]}>Max</Text>
+              <Text style={[s.th, { width: 44, textAlign: 'center' }]}>Got</Text>
+              <Text style={[s.th, { width: 52, textAlign: 'center' }]}>Grade</Text>
+            </View>
 
-            {/* Online Exams table */}
-            {progress.online?.length > 0 && (
-              <SubjectTable title="Online Exams" accent="#4f46e5" rows={progress.online} />
-            )}
-
-            {/* Handwritten Exams table */}
-            {progress.handwritten?.length > 0 && (
-              <SubjectTable title="Handwritten Exams" accent="#0891b2" rows={progress.handwritten} />
-            )}
-
-            {/* Grand total */}
-            {grand && (
-              <View style={[s.tableCard, { marginBottom: 12 }]}>
-                <View style={[s.tableRow, s.grandRow]}>
-                  <View style={{ flex: 2 }}>
-                    <Text style={s.grandLabel}>Grand Total (All)</Text>
-                  </View>
-                  <Text style={[s.grandValue, { width: 65 }]}>{grand.total_score}/{grand.total_marks}</Text>
-                  <Text style={[s.grandValue, { width: 42, color: grand.percentage >= 60 ? '#10b981' : grand.percentage >= 35 ? '#f59e0b' : '#dc2626' }]}>
-                    {Math.round(grand.percentage)}%
-                  </Text>
-                  <View style={{ width: 32, alignItems: 'center' }}>
-                    {(() => { const g = getGrade(Math.round(grand.percentage)); return (
-                      <View style={[s.gradeBadge, { backgroundColor: g.bg }]}>
-                        <Text style={[s.gradeText, { color: g.color }]}>{g.label}</Text>
+            {rows.map((row, idx) => {
+              const g = gradeBadge(row.pct);
+              return (
+                <TouchableOpacity
+                  key={row.key}
+                  style={[s.tableRow, idx < rows.length - 1 && s.rowBorder]}
+                  onPress={() => handleRowPress(row)}
+                  activeOpacity={row.result_id ? 0.7 : 1}
+                >
+                  <Text style={[s.td, { width: 24, color: '#94a3b8' }]}>{idx + 1}</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <View style={s.subjectIcon}>
+                        <Text style={s.subjectIconText}>{row.subject.charAt(0).toUpperCase()}</Text>
                       </View>
-                    ); })()}
+                      <Text style={s.subjectName} numberOfLines={1}>{row.subject}</Text>
+                      {row.source === 'handwritten' && <Text style={{ fontSize: 10 }}>✍️</Text>}
+                    </View>
+                    <View style={{ marginTop: 4, paddingLeft: 30 }}>
+                      <PctBar pct={row.pct} color={row.pct >= 60 ? '#10b981' : row.pct >= 35 ? '#f59e0b' : '#ef4444'} />
+                    </View>
                   </View>
+                  <View style={{ width: 60, alignItems: 'center' }}>
+                    {row.category ? (
+                      <View style={s.categoryChip}>
+                        <Text style={s.categoryChipText} numberOfLines={1}>{row.category}</Text>
+                      </View>
+                    ) : (
+                      <Text style={{ color: '#94a3b8', fontSize: 12 }}>—</Text>
+                    )}
+                  </View>
+                  <Text style={[s.td, { width: 36, textAlign: 'center', color: '#475569' }]}>{row.total}</Text>
+                  <Text style={[s.td, { width: 44, textAlign: 'center', color: '#4f46e5', fontWeight: '800' }]}>{row.score}</Text>
+                  <View style={{ width: 52, alignItems: 'center' }}>
+                    <View style={[s.gradePill, { backgroundColor: g.bg }]}>
+                      <Text style={[s.gradePillText, { color: g.color }]}>{g.label}</Text>
+                    </View>
+                    {row.result_id ? (
+                      <Text style={{ fontSize: 10, color: '#6366f1', marginTop: 2 }}>View →</Text>
+                    ) : null}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Total row */}
+            <View style={[s.tableRow, s.totalRow]}>
+              <Text style={[s.totalLabel, { width: 24 }]} />
+              <Text style={[s.totalLabel, { flex: 1 }]}>Total</Text>
+              <View style={{ width: 60 }} />
+              <Text style={[s.totalLabel, { width: 36, textAlign: 'center' }]}>{grandTotal}</Text>
+              <Text style={[s.totalValue, { width: 44, textAlign: 'center' }]}>{grandScore}</Text>
+              <View style={{ width: 52, alignItems: 'center' }}>
+                <View style={[s.gradePill, { backgroundColor: grandGrade.bg }]}>
+                  <Text style={[s.gradePillText, { color: grandGrade.color }]}>{grandGrade.label}</Text>
                 </View>
-              </View>
-            )}
-
-            {/* AI Analysis */}
-            {progressAnalysis && (
-              <View style={s.analysisCard}>
-                <Text style={s.analysisSectionTitle}>AI Analysis</Text>
-                {progressAnalysis.strengths?.length > 0 && (
-                  <View style={s.analysisBlock}>
-                    <Text style={[s.analysisBlockTitle, { color: '#059669' }]}>STRENGTHS</Text>
-                    {progressAnalysis.strengths.map((pt, i) => <Text key={i} style={[s.analysisPt, { color: '#065f46' }]}>• {pt}</Text>)}
-                  </View>
-                )}
-                {progressAnalysis.weaknesses?.length > 0 && (
-                  <View style={s.analysisBlock}>
-                    <Text style={[s.analysisBlockTitle, { color: '#dc2626' }]}>AREAS TO IMPROVE</Text>
-                    {progressAnalysis.weaknesses.map((pt, i) => <Text key={i} style={[s.analysisPt, { color: '#991b1b' }]}>• {pt}</Text>)}
-                  </View>
-                )}
-                {progressAnalysis.recommendations?.length > 0 && (
-                  <View style={s.analysisBlock}>
-                    <Text style={[s.analysisBlockTitle, { color: '#2563eb' }]}>RECOMMENDATIONS</Text>
-                    {progressAnalysis.recommendations.map((pt, i) => <Text key={i} style={[s.analysisPt, { color: '#1e40af' }]}>• {pt}</Text>)}
-                  </View>
-                )}
-              </View>
-            )}
-
-            {/* Grade scale legend */}
-            <View style={s.legendCard}>
-              <Text style={s.legendTitle}>Grade Scale</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-                {GRADES.map(g => (
-                  <View key={g.label} style={[s.gradeBadge, { backgroundColor: g.bg }]}>
-                    <Text style={[s.gradeText, { color: g.color }]}>{g.label} ≥{g.min}%</Text>
-                  </View>
-                ))}
               </View>
             </View>
-          </>
+
+            {/* Legend */}
+            <View style={s.legend}>
+              {[
+                { color: '#10b981', label: 'A+ ≥90%' },
+                { color: '#22c55e', label: 'A ≥75%' },
+                { color: '#3b82f6', label: 'B ≥60%' },
+                { color: '#eab308', label: 'C ≥50%' },
+                { color: '#f97316', label: 'D ≥35%' },
+                { color: '#ef4444', label: 'F <35%' },
+              ].map(({ color, label }) => (
+                <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
+                  <Text style={{ fontSize: 10, color: '#94a3b8' }}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
         )}
       </ScrollView>
 
-      {/* Student modal */}
       <PickerModal
         visible={studentModal}
         title="Select Student"
-        items={students.map(s => ({ ...s, label: studentName(s) }))}
-        onSelect={setStudent}
+        items={filteredStudents.map(s => ({ ...s, label: `${s.first_name} ${s.last_name}${s.grade ? ` (Class ${s.grade}${s.section || ''})` : ''}` }))}
+        onSelect={s => { setSelectedStudent(s); setStudentModal(false); }}
         onClose={() => setStudentModal(false)}
-      />
-
-      {/* Category modal */}
-      <PickerModal
-        visible={categoryModal}
-        title="Select Category"
-        items={CATEGORIES}
-        onSelect={setCategory}
-        onClose={() => setCategoryModal(false)}
       />
     </View>
   );
 }
 
 const s = StyleSheet.create({
+  card:           { backgroundColor: '#fff', borderRadius: 16, marginBottom: 16, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
+  cardHeader:     { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  cardIcon:       { width: 32, height: 32, borderRadius: 10, backgroundColor: '#4f46e5', alignItems: 'center', justifyContent: 'center' },
+  cardHeaderText: { fontSize: 14, fontWeight: '800', color: '#1e293b' },
+  cardBody:       { padding: 16 },
+  label:          { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  input:          { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#334155', backgroundColor: '#f8fafc' },
+  pickerBtn:      { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' },
+  pickerBtnText:  { color: '#334155', fontSize: 13, flex: 1 },
+  primaryBtn:     { flex: 1, backgroundColor: '#4f46e5', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  primaryBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  clearBtn:       { paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  clearBtnText:   { color: '#64748b', fontWeight: '700', fontSize: 13 },
 
-  filterCard:     { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
-  filterTitle:    { fontSize: 14, fontWeight: '800', color: '#1e293b', marginBottom: 12 },
-  filterLabel:    { fontSize: 12, fontWeight: '700', color: '#64748b', marginBottom: 6 },
-  pickerBtn:      { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pickerBtnText:  { color: '#334155', fontSize: 14, flex: 1 },
-  dateInput:      { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, color: '#334155' },
-  applyBtn:       { backgroundColor: '#4f46e5', borderRadius: 10, paddingVertical: 11, alignItems: 'center', marginTop: 14 },
-  applyBtnText:   { color: '#fff', fontWeight: '800', fontSize: 13 },
-
-  studentStrip:   { backgroundColor: '#fff', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
-  studentAvatar:  { width: 44, height: 44, borderRadius: 22, backgroundColor: '#ede9fe', alignItems: 'center', justifyContent: 'center' },
-  studentAvatarText: { fontSize: 18, fontWeight: '800', color: '#5b21b6' },
-  studentName:    { fontSize: 15, fontWeight: '700', color: '#1e293b' },
-  studentMeta:    { fontSize: 12, color: '#64748b' },
-  overallPct:     { fontSize: 22, fontWeight: '800', color: '#4f46e5' },
-
-  tableCard:      { backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
-  tableRow:       { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  tableHeader:    { backgroundColor: '#f8fafc' },
-  th:             { fontSize: 11, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
-  td:             { fontSize: 13, color: '#334155', textAlign: 'right' },
-  subjectName:    { fontSize: 13, fontWeight: '700', color: '#1e293b' },
-  gradeBadge:     { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
-  gradeText:      { fontSize: 10, fontWeight: '800' },
-  grandRow:       { backgroundColor: '#f0fdf4', borderTopWidth: 2, borderTopColor: '#bbf7d0' },
-  grandLabel:     { fontSize: 13, fontWeight: '800', color: '#065f46' },
-  grandValue:     { fontSize: 13, fontWeight: '800', color: '#065f46', textAlign: 'right' },
-
-  legendCard:           { backgroundColor: '#fff', borderRadius: 14, padding: 14, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
-  legendTitle:          { fontSize: 12, fontWeight: '700', color: '#64748b', marginBottom: 8 },
-  analysisCard:         { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
-  analysisSectionTitle: { fontSize: 14, fontWeight: '800', color: '#1e293b', marginBottom: 12 },
-  analysisBlock:        { marginBottom: 10 },
-  analysisBlockTitle:   { fontSize: 11, fontWeight: '800', marginBottom: 6 },
-  analysisPt:           { fontSize: 12, lineHeight: 18, marginBottom: 3 },
+  tableHead:      { backgroundColor: '#1e293b', paddingVertical: 12 },
+  th:             { fontSize: 10, fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 },
+  tableRow:       { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, gap: 6 },
+  rowBorder:      { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  td:             { fontSize: 13, color: '#334155' },
+  subjectIcon:    { width: 26, height: 26, borderRadius: 8, backgroundColor: '#eef2ff', alignItems: 'center', justifyContent: 'center' },
+  subjectIconText:{ fontSize: 11, fontWeight: '800', color: '#4f46e5' },
+  subjectName:    { fontSize: 13, fontWeight: '600', color: '#1e293b', flex: 1 },
+  categoryChip:   { backgroundColor: '#eef2ff', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, maxWidth: 58 },
+  categoryChipText:{ fontSize: 10, fontWeight: '600', color: '#4f46e5' },
+  gradePill:      { borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 },
+  gradePillText:  { fontSize: 11, fontWeight: '800' },
+  totalRow:       { backgroundColor: '#eef2ff', borderTopWidth: 2, borderTopColor: '#c7d2fe' },
+  totalLabel:     { fontSize: 13, fontWeight: '800', color: '#4338ca' },
+  totalValue:     { fontSize: 13, fontWeight: '800', color: '#4f46e5' },
+  legend:         { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingHorizontal: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
 });
