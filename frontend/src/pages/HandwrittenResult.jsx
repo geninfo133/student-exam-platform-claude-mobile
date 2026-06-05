@@ -41,6 +41,7 @@ export default function HandwrittenResult() {
   const [exam, setExam] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [showAnswers, setShowAnswers] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -235,38 +236,9 @@ export default function HandwrittenResult() {
             </div>
           )}
 
-          {/* Overall Feedback */}
-          {grading.overall_feedback && (
-            <div className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden">
-              <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-3 flex items-center gap-2">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <h3 className="font-semibold text-white text-sm">Overall Feedback</h3>
-              </div>
-              <div className="p-5">
-                <p className="text-sm text-gray-700 leading-relaxed">{grading.overall_feedback}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Insights */}
-          {(grading.strengths?.length > 0 || grading.weaknesses?.length > 0 || grading.recommendations?.length > 0) && (
+          {/* Insight cards — Areas to Improve / Suggestions / Strengths */}
+          {(grading.weaknesses?.length > 0 || grading.recommendations?.length > 0 || grading.strengths?.length > 0) && (
             <div className="grid md:grid-cols-3 gap-4">
-              {grading.strengths?.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3">
-                    <h3 className="font-semibold text-white text-sm">Strengths</h3>
-                  </div>
-                  <ul className="p-5 space-y-2">
-                    {grading.strengths.map((s, i) => (
-                      <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-                        <span className="text-emerald-500 mt-0.5 font-bold">+</span> {s}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
               {grading.weaknesses?.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-red-500 to-rose-600 px-5 py-3">
@@ -282,14 +254,28 @@ export default function HandwrittenResult() {
                 </div>
               )}
               {grading.recommendations?.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-blue-500 to-indigo-600 px-5 py-3">
-                    <h3 className="font-semibold text-white text-sm">Recommendations</h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-3">
+                    <h3 className="font-semibold text-white text-sm">Suggestions</h3>
                   </div>
                   <ul className="p-5 space-y-2">
                     {grading.recommendations.map((r, i) => (
                       <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
-                        <span className="text-blue-500 mt-0.5 font-bold">*</span> {r}
+                        <span className="text-indigo-500 mt-0.5 font-bold">•</span> {r}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {grading.strengths?.length > 0 && (
+                <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3">
+                    <h3 className="font-semibold text-white text-sm">Strengths</h3>
+                  </div>
+                  <ul className="p-5 space-y-2">
+                    {grading.strengths.map((s, i) => (
+                      <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                        <span className="text-emerald-500 mt-0.5 font-bold">+</span> {s}
                       </li>
                     ))}
                   </ul>
@@ -298,60 +284,67 @@ export default function HandwrittenResult() {
             </div>
           )}
 
-          {/* Per-question breakdown — always visible */}
+          {/* Review Answers toggle button */}
           {grading.questions?.length > 0 && (
             <div>
-              <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                </span>
-                Question Breakdown
-              </h3>
+              <button
+                onClick={() => setShowAnswers(v => !v)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAnswers
+                    ? 'M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21'
+                    : 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z'
+                  } />
+                </svg>
+                {showAnswers ? 'Hide Answers' : 'Review Answers'}
+              </button>
 
-              <div className="space-y-4">
-                {grading.questions.map((q, i) => {
-                  const strip = getMarkColor(q.marks_awarded, q.max_marks);
-                  const full  = q.marks_awarded >= q.max_marks;
-                  const part  = !full && q.marks_awarded > 0;
-                  return (
-                    <div key={i} className={`bg-white rounded-2xl shadow-sm border border-gray-100 border-l-4 ${strip} overflow-hidden`}>
-                      <div className="px-5 py-4 flex items-center justify-between border-b border-gray-50">
-                        <div className="flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
-                            {q.question_number}
+              {showAnswers && (
+                <div className="space-y-4 mt-4">
+                  {grading.questions.map((q, i) => {
+                    const strip = getMarkColor(q.marks_awarded, q.max_marks);
+                    const full  = q.marks_awarded >= q.max_marks;
+                    const part  = !full && q.marks_awarded > 0;
+                    return (
+                      <div key={i} className={`bg-white rounded-2xl shadow-sm border border-gray-100 border-l-4 ${strip} overflow-hidden`}>
+                        <div className="px-5 py-4 flex items-center justify-between border-b border-gray-50">
+                          <div className="flex items-center gap-2">
+                            <span className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
+                              {q.question_number}
+                            </span>
+                            <span className="text-sm text-gray-400">Question {i + 1}</span>
+                          </div>
+                          <span className={`font-bold text-sm ${full ? 'text-emerald-600' : part ? 'text-amber-600' : 'text-red-600'}`}>
+                            {q.marks_awarded}/{q.max_marks} marks
                           </span>
-                          <span className="text-sm text-gray-400">Question {i + 1}</span>
                         </div>
-                        <span className={`font-bold text-sm ${full ? 'text-emerald-600' : part ? 'text-amber-600' : 'text-red-600'}`}>
-                          {q.marks_awarded}/{q.max_marks} marks
-                        </span>
+                        <div className="p-5 space-y-3">
+                          <p className="font-medium text-gray-800 text-sm">{q.question_text}</p>
+                          {q.student_answer && (
+                            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                              <p className="text-xs text-gray-500 font-medium mb-1">Your Answer</p>
+                              <p className="text-sm text-gray-800">{q.student_answer}</p>
+                            </div>
+                          )}
+                          {q.correct_answer && (
+                            <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                              <p className="text-xs text-emerald-600 font-medium mb-1">Expected Answer</p>
+                              <p className="text-sm text-gray-800">{q.correct_answer}</p>
+                            </div>
+                          )}
+                          {q.feedback && (
+                            <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                              <p className="text-xs text-blue-600 font-medium mb-1">AI Feedback</p>
+                              <p className="text-sm text-gray-800">{q.feedback}</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="p-5 space-y-3">
-                        <p className="font-medium text-gray-800 text-sm">{q.question_text}</p>
-                        {q.student_answer && (
-                          <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-                            <p className="text-xs text-gray-500 font-medium mb-1">Your Answer</p>
-                            <p className="text-sm text-gray-800">{q.student_answer}</p>
-                          </div>
-                        )}
-                        {q.correct_answer && (
-                          <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
-                            <p className="text-xs text-emerald-600 font-medium mb-1">Expected Answer</p>
-                            <p className="text-sm text-gray-800">{q.correct_answer}</p>
-                          </div>
-                        )}
-                        {q.feedback && (
-                          <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-                            <p className="text-xs text-blue-600 font-medium mb-1">AI Feedback</p>
-                            <p className="text-sm text-gray-800">{q.feedback}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
