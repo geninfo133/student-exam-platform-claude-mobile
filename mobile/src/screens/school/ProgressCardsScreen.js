@@ -113,11 +113,10 @@ export default function ProgressCardsScreen({ navigation }) {
 
   const handleRowPress = (row) => {
     if (!row.result_id) return;
-    if (row.source === 'handwritten') {
-      navigation.navigate('ExamPaperView', { paperId: row.result_id, source: 'handwritten' });
-    } else {
-      navigation.navigate('ExamResultDetail', { resultId: row.result_id, type: 'online' });
-    }
+    navigation.navigate('ExamResultDetail', {
+      resultId: row.result_id,
+      type: row.source === 'handwritten' ? 'handwritten' : 'online',
+    });
   };
 
   if (studentsLoading) return <LoadingScreen color="#4f46e5" />;

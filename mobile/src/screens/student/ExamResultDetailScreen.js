@@ -3,13 +3,88 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, Dimensions,
 } from 'react-native';
-import { BarChart, PieChart } from 'react-native-chart-kit';
+import { PieChart } from 'react-native-chart-kit';
 import api from '../../api/axios';
 import LoadingScreen from '../../components/LoadingScreen';
 import { deriveHWAnalysis, deriveOnlineAnalysis } from '../../utils/helpers';
 
 const W = Dimensions.get('window').width;
 const CHART_W = W - 48;
+
+function GroupedBarChart({ data, height = 200 }) {
+  if (!data || data.length === 0) return null;
+  const maxVal = Math.max(...data.flatMap(d => [d.obtained, d.total]), 1);
+  const chartH = height - 40; // leave room for labels
+  const ySteps = 4;
+
+  return (
+    <View style={{ padding: 16 }}>
+      <View style={{ flexDirection: 'row', height }}>
+        {/* Y-axis */}
+        <View style={{ width: 32, justifyContent: 'space-between', paddingBottom: 24 }}>
+          {Array.from({ length: ySteps + 1 }).map((_, i) => {
+            const val = Math.round(maxVal * (1 - i / ySteps));
+            return (
+              <Text key={i} style={{ fontSize: 10, color: '#94a3b8', textAlign: 'right' }}>
+                {val}
+              </Text>
+            );
+          })}
+        </View>
+
+        {/* Bars area */}
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end',
+                       justifyContent: 'space-around', paddingBottom: 24, borderLeftWidth: 1,
+                       borderBottomWidth: 1, borderColor: '#f1f5f9', marginLeft: 4 }}>
+          {data.map(({ label, obtained, total }) => (
+            <View key={label} style={{ alignItems: 'center', gap: 4 }}>
+              {/* Two bars side by side */}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
+                <View style={{ width: 28, alignItems: 'center' }}>
+                  {obtained > 0 && (
+                    <Text style={{ fontSize: 9, color: '#6366f1', fontWeight: '800', marginBottom: 2 }}>
+                      {obtained}
+                    </Text>
+                  )}
+                  <View style={{
+                    width: 28,
+                    height: Math.max((obtained / maxVal) * chartH, obtained > 0 ? 4 : 0),
+                    backgroundColor: '#6366f1',
+                    borderRadius: 3,
+                  }} />
+                </View>
+                <View style={{ width: 28, alignItems: 'center' }}>
+                  {total > 0 && (
+                    <Text style={{ fontSize: 9, color: '#94a3b8', fontWeight: '800', marginBottom: 2 }}>
+                      {total}
+                    </Text>
+                  )}
+                  <View style={{
+                    width: 28,
+                    height: Math.max((total / maxVal) * chartH, 4),
+                    backgroundColor: '#e2e8f0',
+                    borderRadius: 3,
+                  }} />
+                </View>
+              </View>
+              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {/* Legend */}
+      <View style={{ flexDirection: 'row', gap: 16, marginTop: 4, paddingLeft: 36 }}>
+        {[{ color: '#6366f1', label: 'Obtained' }, { color: '#e2e8f0', label: 'Total' }].map(({ color, label }) => (
+          <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: color }} />
+            <Text style={{ fontSize: 11, color: '#64748b' }}>{label}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
 
 const CHART_CFG = {
   backgroundGradientFrom: '#ffffff',
@@ -131,11 +206,11 @@ export default function ExamResultDetailScreen({ route, navigation }) {
   const diffBreakdown = analysis.difficulty_breakdown   || result.analysis_data?.difficulty_breakdown   || {};
 
   // Charts
-  const typeChartEntries = Object.entries(typeBreakdown);
-  const typeBarData = typeChartEntries.length > 0 ? {
-    labels: typeChartEntries.map(([k]) => k === 'MCQ' ? 'MCQ' : k === 'SHORT' ? 'Short' : 'Long'),
-    datasets: [{ data: typeChartEntries.map(([, v]) => Math.max(v.marks_obtained || 0, 0.001)) }],
-  } : null;
+  const typeChartEntries = Object.entries(typeBreakdown).map(([k, v]) => ({
+    label: k === 'MCQ' ? 'MCQ' : k === 'SHORT' ? 'Short Answer' : 'Long Answer',
+    obtained: v.marks_obtained || 0,
+    total:    v.total_marks    || 0,
+  })).filter(e => e.total > 0);
 
   const pieRaw = [
     { name: 'Correct',    count: Math.max(correct, 0.001),    color: '#10b981', legendFontColor: '#334155', legendFontSize: 12 },
@@ -172,16 +247,38 @@ export default function ExamResultDetailScreen({ route, navigation }) {
               <Text style={s.headerTitle} numberOfLines={2}>
                 {result.subject_name || result.title || result.exam_title || 'Result'}
               </Text>
-              <Text style={s.headerSub}>
-                {result.exam_type_name || result.exam_category_display || ''}
-                {result.chapter_name ? ` · ${result.chapter_name}` : ''}
-              </Text>
-              {!isHW && (
+              {isHW ? (
+                <View style={{ marginBottom: 6 }}>
+                  <View style={{ backgroundColor: 'rgba(139,92,246,0.3)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 6, borderWidth: 1, borderColor: 'rgba(167,139,250,0.4)' }}>
+                    <Text style={{ color: '#c4b5fd', fontSize: 10, fontWeight: '700' }}>✍️ Handwritten</Text>
+                  </View>
+                  <Text style={s.headerSub}>{result.subject_name || ''}</Text>
+                </View>
+              ) : (
+                <Text style={s.headerSub}>
+                  {result.exam_type_name || result.exam_category_display || ''}
+                  {result.chapter_name ? ` · ${result.chapter_name}` : ''}
+                </Text>
+              )}
+              {isHW ? (
                 <View style={s.typeRow}>
                   {[
-                    { label: `MCQ /${result.total_mcq_marks ?? 20}`,   value: result.mcq_score ?? '-' },
+                    { label: 'Obtained', value: score },
+                    { label: 'Total',    value: totalMarks },
+                    { label: 'Lost',     value: totalMarks - score },
+                  ].map(({ label, value }) => (
+                    <View key={label} style={s.typeChip}>
+                      <Text style={s.typeChipVal}>{value}</Text>
+                      <Text style={s.typeChipLbl}>{label}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
+                <View style={s.typeRow}>
+                  {[
+                    { label: `MCQ /${result.total_mcq_marks ?? 20}`,    value: result.mcq_score ?? '-' },
                     { label: `Short /${result.total_short_marks ?? 10}`, value: result.short_answer_score ?? '-' },
-                    { label: `Long /${result.total_long_marks ?? 20}`,  value: result.long_answer_score ?? '-' },
+                    { label: `Long /${result.total_long_marks ?? 20}`,   value: result.long_answer_score ?? '-' },
                   ].map(({ label, value }) => (
                     <View key={label} style={s.typeChip}>
                       <Text style={s.typeChipVal}>{value}</Text>
@@ -227,7 +324,11 @@ export default function ExamResultDetailScreen({ route, navigation }) {
           {/* Stat tiles */}
           {!isGrading && (
             <View style={s.statsRow}>
-              {[
+              {isHW ? [
+                { label: 'Obtained', value: score,               color: '#059669', bg: '#d1fae5' },
+                { label: 'Total',    value: totalMarks,          color: '#4f46e5', bg: '#eef2ff' },
+                { label: 'Lost',     value: totalMarks - score,  color: '#dc2626', bg: '#fee2e2' },
+              ] : [
                 { label: 'Correct',    value: correct,    color: '#059669', bg: '#d1fae5' },
                 { label: 'Wrong',      value: incorrect,  color: '#dc2626', bg: '#fee2e2' },
                 { label: 'Unanswered', value: unanswered, color: '#94a3b8', bg: '#f1f5f9' },
@@ -241,60 +342,74 @@ export default function ExamResultDetailScreen({ route, navigation }) {
             </View>
           )}
 
-          {/* Charts */}
-          {!isGrading && (typeBarData || pieData) && (
-            <View style={s.chartsRow}>
-              {typeBarData && (
-                <View style={s.chartCard}>
-                  <View style={s.chartHeader}>
-                    <Text style={s.chartTitle}>Marks by Question Type</Text>
-                  </View>
-                  <View style={{ paddingVertical: 8 }}>
-                    <BarChart
-                      data={typeBarData}
-                      width={CHART_W / 2 - 8}
-                      height={160}
-                      chartConfig={{ ...CHART_CFG, color: (o=1) => `rgba(99,102,241,${o})`, barPercentage: 0.6 }}
-                      fromZero
-                      withInnerLines={false}
-                      showValuesOnTopOfBars
-                      style={{ borderRadius: 8 }}
-                    />
-                  </View>
+          {/* Handwritten: Score Overview donut + Question-wise bar */}
+          {!isGrading && isHW && totalMarks > 0 && (
+            <>
+              <View style={[s.chartCard, { marginBottom: 12 }]}>
+                <View style={s.chartHeader}>
+                  <Text style={s.chartTitle}>Score Overview</Text>
                 </View>
-              )}
+                <View style={{ alignItems: 'center', paddingTop: 8 }}>
+                  <PieChart
+                    data={[
+                      { name: 'Scored',    count: Math.max(score, 0.001),             color: '#f59e0b', legendFontColor: '#334155', legendFontSize: 12 },
+                      { name: 'Remaining', count: Math.max(totalMarks - score, 0.001), color: '#e5e7eb', legendFontColor: '#334155', legendFontSize: 12 },
+                    ]}
+                    width={CHART_W}
+                    height={200}
+                    chartConfig={{ ...CHART_CFG, color: (o=1) => `rgba(245,158,11,${o})` }}
+                    accessor="count"
+                    backgroundColor="transparent"
+                    paddingLeft="15"
+                  />
+                </View>
+              </View>
 
-              {pieData && (
-                <View style={s.chartCard}>
+              {answers.length > 0 && (
+                <View style={[s.chartCard, { marginBottom: 12 }]}>
                   <View style={s.chartHeader}>
-                    <Text style={s.chartTitle}>Answer Distribution</Text>
+                    <Text style={s.chartTitle}>Question-wise Marks</Text>
                   </View>
-                  <View style={{ paddingVertical: 8 }}>
-                    <PieChart
-                      data={pieData}
-                      width={CHART_W / 2 - 8}
-                      height={160}
-                      chartConfig={CHART_CFG}
-                      accessor="count"
-                      backgroundColor="transparent"
-                      paddingLeft="8"
-                      hasLegend={false}
-                    />
-                    <View style={{ paddingHorizontal: 8, gap: 3 }}>
-                      {[
-                        { label: `Correct: ${correct}`,    color: '#10b981' },
-                        { label: `Wrong: ${incorrect}`,    color: '#ef4444' },
-                        { label: `Skipped: ${unanswered}`, color: '#94a3b8' },
-                      ].map(({ label, color }) => (
-                        <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color }} />
-                          <Text style={{ fontSize: 10, color: '#64748b' }}>{label}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
+                  <GroupedBarChart
+                    data={answers.map((q, i) => ({
+                      label: `Q${q.question_number ?? i + 1}`,
+                      obtained: q.marks_awarded ?? 0,
+                      total:    q.max_marks ?? 1,
+                    }))}
+                    height={200}
+                  />
                 </View>
               )}
+            </>
+          )}
+
+          {/* Online: Marks by Question Type */}
+          {!isGrading && !isHW && typeChartEntries.length > 0 && (
+            <View style={[s.chartCard, { marginBottom: 12 }]}>
+              <View style={s.chartHeader}>
+                <Text style={s.chartTitle}>Marks by Question Type</Text>
+              </View>
+              <GroupedBarChart data={typeChartEntries} height={200} />
+            </View>
+          )}
+
+          {/* Online: Answer Distribution */}
+          {!isGrading && !isHW && pieData && (
+            <View style={[s.chartCard, { marginBottom: 12 }]}>
+              <View style={s.chartHeader}>
+                <Text style={s.chartTitle}>Answer Distribution</Text>
+              </View>
+              <View style={{ alignItems: 'center', paddingTop: 8 }}>
+                <PieChart
+                  data={pieData}
+                  width={CHART_W}
+                  height={200}
+                  chartConfig={CHART_CFG}
+                  accessor="count"
+                  backgroundColor="transparent"
+                  paddingLeft="15"
+                />
+              </View>
             </View>
           )}
 
@@ -518,8 +633,7 @@ const s = StyleSheet.create({
   statVal:      { fontSize: 20, fontWeight: '800' },
   statLbl:      { fontSize: 10, marginTop: 2, fontWeight: '600' },
 
-  chartsRow:    { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  chartCard:    { flex: 1, backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
+  chartCard:    { backgroundColor: '#fff', borderRadius: 14, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6 },
   chartHeader:  { backgroundColor: '#1e293b', paddingHorizontal: 12, paddingVertical: 10 },
   chartTitle:   { color: '#fff', fontWeight: '700', fontSize: 11 },
 
