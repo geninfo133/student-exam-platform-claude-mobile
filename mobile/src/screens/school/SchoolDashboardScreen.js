@@ -13,6 +13,7 @@ const ACTIONS = [
   { label: 'Assignments',    sub: 'Assign teachers to subjects', screen: 'Assignments', color: '#d97706', bg: '#fffbeb' },
   { label: 'Create Exam',    sub: 'Create & assign exams',   screen: 'CreateExam',     color: '#059669', bg: '#ecfdf5' },
   { label: 'Created Exams',  sub: 'View all exams',          screen: 'CreatedExams',   color: '#4f46e5', bg: '#eef2ff' },
+  { label: 'All Exams',      sub: 'Exams by all teachers',   screen: 'SchoolExamsList', color: '#059669', bg: '#ecfdf5' },
   { label: 'Upload Paper',   sub: 'Upload & generate Qs',   screen: 'UploadPaper',    color: '#0891b2', bg: '#ecfeff' },
   { label: 'Papers List',    sub: 'View uploaded papers',   screen: 'PapersList',     color: '#7c3aed', bg: '#f5f3ff' },
   { label: 'Generate Questions', sub: 'AI question generation', screen: 'GeneratePaper',  color: '#059669', bg: '#ecfdf5' },

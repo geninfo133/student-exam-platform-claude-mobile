@@ -30,6 +30,7 @@ import GeneratePaperScreen from '../screens/teacher/GeneratePaperScreen';
 import ManageStudyMaterialsScreen from '../screens/teacher/ManageStudyMaterialsScreen';
 import HandwrittenListScreen from '../screens/teacher/HandwrittenListScreen';
 import SchoolDashboardScreen from '../screens/school/SchoolDashboardScreen';
+import SchoolExamsListScreen from '../screens/school/SchoolExamsListScreen';
 import ManageStudentsScreen from '../screens/school/ManageStudentsScreen';
 import ManageTeachersScreen from '../screens/school/ManageTeachersScreen';
 import ManageSubjectsScreen from '../screens/school/ManageSubjectsScreen';
@@ -150,7 +151,8 @@ function SchoolNavigator() {
       <SchoolStack.Screen name="CreatedExams"    component={CreatedExamsScreen} />
       <SchoolStack.Screen name="ExamSubmissions"  component={ExamSubmissionsScreen} />
       <SchoolStack.Screen name="ExamPaperView"    component={ExamPaperViewScreen} />
-      <SchoolStack.Screen name="ExamResultDetail" component={ExamResultDetailScreen} />
+      <SchoolStack.Screen name="ExamResultDetail"  component={ExamResultDetailScreen} />
+      <SchoolStack.Screen name="SchoolExamsList"   component={SchoolExamsListScreen} />
     </SchoolStack.Navigator>
   );
 }
