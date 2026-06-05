@@ -298,20 +298,19 @@ export default function HandwrittenResult() {
             </div>
           )}
 
-          {/* Per-question breakdown */}
+          {/* Per-question breakdown — always visible */}
           {grading.questions?.length > 0 && (
             <div>
-              <button
-                onClick={() => document.getElementById('hw-questions').classList.toggle('hidden')}
-                className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold rounded-xl transition-all shadow-sm text-sm mb-4"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
+              <h3 className="text-base font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-xs">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </span>
                 Question Breakdown
-              </button>
+              </h3>
 
-              <div id="hw-questions" className="space-y-4">
+              <div className="space-y-4">
                 {grading.questions.map((q, i) => {
                   const strip = getMarkColor(q.marks_awarded, q.max_marks);
                   const full  = q.marks_awarded >= q.max_marks;
@@ -353,7 +352,6 @@ export default function HandwrittenResult() {
                     </div>
                   );
                 })}
-              </div>
             </div>
           )}
 
