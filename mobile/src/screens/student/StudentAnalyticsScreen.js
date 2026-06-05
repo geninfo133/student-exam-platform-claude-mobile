@@ -24,6 +24,7 @@ const PERIODS = [
 const BASE_CFG = {
   backgroundGradientFrom: '#ffffff',
   backgroundGradientTo:   '#ffffff',
+  color: (opacity = 1) => `rgba(16, 185, 129, ${opacity})`,
   decimalPlaces: 0,
   labelColor: () => '#94a3b8',
   style: { borderRadius: 12 },
@@ -46,9 +47,9 @@ export default function StudentAnalyticsScreen({ navigation }) {
   useEffect(() => { load(); }, [load]);
 
   const ov          = data?.overview || {};
-  const subjects    = data?.subjects || data?.subject_breakdown || [];
+  const subjects    = data?.subject_breakdown || data?.subjects || [];
   const recentExams = data?.recent_exams || data?.recent || [];
-  const improvement = data?.improvement || data?.improvement_data || [];
+  const improvement = data?.improvement || data?.improvement_data || data?.trends || [];
   const qta         = data?.question_type_analysis || null;
 
   const avgPct     = ov.average_percentage ?? ov.avg_score ?? null;
@@ -67,14 +68,14 @@ export default function StudentAnalyticsScreen({ navigation }) {
   } : null;
 
   const lineData = improvement.length >= 2 ? {
-    labels: improvement.map(p => String(p.label || p.period || '').slice(0, 4)),
-    datasets: [{ data: improvement.map(p => Math.round(p.percentage || p.avg || 0) || 0) }],
+    labels: improvement.map(p => String(p.label || p.period || '').slice(0, 7)),
+    datasets: [{ data: improvement.map(p => Math.max(Math.round(p.percentage || p.avg || p.combined_avg || 0), 1)) }],
   } : null;
 
   const pieData = passCount > 0 || failCount > 0 ? [
-    { name: 'Pass', count: passCount || 0, color: '#10b981', legendFontColor: '#334155', legendFontSize: 13 },
-    { name: 'Fail', count: failCount || 0, color: '#ef4444', legendFontColor: '#334155', legendFontSize: 13 },
-  ].filter(d => d.count > 0) : null;
+    { name: 'Pass', count: Math.max(passCount || 0, 0.001), color: '#10b981', legendFontColor: '#334155', legendFontSize: 13 },
+    { name: 'Fail', count: Math.max(failCount || 0, 0.001), color: '#ef4444', legendFontColor: '#334155', legendFontSize: 13 },
+  ] : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f0f4ff' }}>
@@ -157,7 +158,7 @@ export default function StudentAnalyticsScreen({ navigation }) {
           ) : null}
 
           {/* Pass / Fail pie */}
-          {pieData?.length >= 2 ? (
+          {pieData ? (
             <Card title="Pass / Fail Breakdown" accent="#10b981">
               <PieChart
                 data={pieData}

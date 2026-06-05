@@ -28,6 +28,7 @@ const PERIODS = [
 const BASE_CFG = {
   backgroundGradientFrom: '#ffffff',
   backgroundGradientTo:   '#ffffff',
+  color: (opacity = 1) => `rgba(79, 70, 229, ${opacity})`,
   decimalPlaces: 0,
   labelColor: () => '#94a3b8',
 };
@@ -404,9 +405,9 @@ export default function TeacherAnalyticsScreen({ navigation }) {
 
   // Class overview charts
   const passFail = (ov.pass_count > 0 || ov.fail_count > 0) ? [
-    { name: 'Pass', count: ov.pass_count || 0, color: '#10b981', legendFontColor: '#334155', legendFontSize: 13 },
-    { name: 'Fail', count: ov.fail_count || 0, color: '#ef4444', legendFontColor: '#334155', legendFontSize: 13 },
-  ].filter(d => d.count > 0) : null;
+    { name: 'Pass', count: Math.max(ov.pass_count || 0, 0.001), color: '#10b981', legendFontColor: '#334155', legendFontSize: 13 },
+    { name: 'Fail', count: Math.max(ov.fail_count || 0, 0.001), color: '#ef4444', legendFontColor: '#334155', legendFontSize: 13 },
+  ] : null;
 
   const subjectBreakdown = data?.subject_breakdown || [];
   const subjectBar = subjectBreakdown.length > 0 ? {
@@ -427,8 +428,10 @@ export default function TeacherAnalyticsScreen({ navigation }) {
 
   const trends = data?.trends || [];
   const trendLine = trends.length >= 2 ? {
-    labels: trends.map((t, i) => i % Math.ceil(trends.length / 5) === 0 ? String(t.label || '').slice(0, 4) : ''),
-    datasets: [{ data: trends.map(t => Math.round(t.avg_pct || 0) || 0) }],
+    labels: trends.map((t, i) => i % Math.ceil(trends.length / 5) === 0
+      ? new Date(t.period).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })
+      : ''),
+    datasets: [{ data: trends.map(t => Math.max(Math.round(t.combined_avg || 0), 1)) }],
   } : null;
 
   // Per-student charts
@@ -552,7 +555,7 @@ export default function TeacherAnalyticsScreen({ navigation }) {
             </View>
 
             {/* Pass/Fail Pie */}
-            {passFail?.length >= 2 && (
+            {passFail && (
               <Card title="Pass / Fail Breakdown" accent="#10b981">
                 <PieChart
                   data={passFail}

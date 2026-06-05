@@ -1854,7 +1854,11 @@ class StudentAnalyticsView(APIView):
 
     def get(self, request):
         user = request.user
-        period = int(request.query_params.get('period', 30))
+        raw = request.query_params.get('period', '30')
+        try:
+            period = int(raw)
+        except (ValueError, TypeError):
+            period = 0
         subject_id = request.query_params.get('subject_id')
 
         if period > 0:
