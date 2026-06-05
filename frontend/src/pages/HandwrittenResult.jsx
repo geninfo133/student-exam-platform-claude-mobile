@@ -82,6 +82,7 @@ export default function HandwrittenResult() {
   const pct       = Math.round(exam.percentage || 0);
   const gradeInfo = getGradeInfo(pct);
   const grading   = exam.grading_data || {};
+  const analysis  = grading.analysis || {};
   const pieColor  = pct >= 60 ? '#4f46e5' : pct >= 40 ? '#f59e0b' : '#ef4444';
   const isGraded  = exam.obtained_marks != null;
 
@@ -237,15 +238,15 @@ export default function HandwrittenResult() {
           )}
 
           {/* Insight cards — Areas to Improve / Suggestions / Strengths */}
-          {(grading.weaknesses?.length > 0 || grading.recommendations?.length > 0 || grading.strengths?.length > 0) && (
+          {(analysis.weaknesses?.length > 0 || analysis.recommendations?.length > 0 || analysis.strengths?.length > 0) && (
             <div className="grid md:grid-cols-3 gap-4">
-              {grading.weaknesses?.length > 0 && (
+              {analysis.weaknesses?.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-red-500 to-rose-600 px-5 py-3">
                     <h3 className="font-semibold text-white text-sm">Areas to Improve</h3>
                   </div>
                   <ul className="p-5 space-y-2">
-                    {grading.weaknesses.map((w, i) => (
+                    {analysis.weaknesses.map((w, i) => (
                       <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                         <span className="text-red-500 mt-0.5 font-bold">-</span> {w}
                       </li>
@@ -253,13 +254,13 @@ export default function HandwrittenResult() {
                   </ul>
                 </div>
               )}
-              {grading.recommendations?.length > 0 && (
+              {analysis.recommendations?.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-indigo-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-indigo-500 to-violet-600 px-5 py-3">
                     <h3 className="font-semibold text-white text-sm">Suggestions</h3>
                   </div>
                   <ul className="p-5 space-y-2">
-                    {grading.recommendations.map((r, i) => (
+                    {analysis.recommendations.map((r, i) => (
                       <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                         <span className="text-indigo-500 mt-0.5 font-bold">•</span> {r}
                       </li>
@@ -267,13 +268,13 @@ export default function HandwrittenResult() {
                   </ul>
                 </div>
               )}
-              {grading.strengths?.length > 0 && (
+              {analysis.strengths?.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden">
                   <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-3">
                     <h3 className="font-semibold text-white text-sm">Strengths</h3>
                   </div>
                   <ul className="p-5 space-y-2">
-                    {grading.strengths.map((s, i) => (
+                    {analysis.strengths.map((s, i) => (
                       <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
                         <span className="text-emerald-500 mt-0.5 font-bold">+</span> {s}
                       </li>
