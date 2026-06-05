@@ -126,6 +126,7 @@ function TeacherNavigator() {
       <TeacherStack.Screen name="ManageStudyMaterials"  component={ManageStudyMaterialsScreen} />
       <TeacherStack.Screen name="HandwrittenList"       component={HandwrittenListScreen} />
       <TeacherStack.Screen name="ExamPaperView"         component={ExamPaperViewScreen} />
+      <TeacherStack.Screen name="ExamResultDetail"      component={ExamResultDetailScreen} />
       <TeacherStack.Screen name="ProgressCards"         component={ProgressCardsScreen} />
     </TeacherStack.Navigator>
   );
@@ -147,8 +148,9 @@ function SchoolNavigator() {
       <SchoolStack.Screen name="GeneratePaper"   component={GeneratePaperScreen} />
       <SchoolStack.Screen name="CreateExam"      component={CreateExamScreen} />
       <SchoolStack.Screen name="CreatedExams"    component={CreatedExamsScreen} />
-      <SchoolStack.Screen name="ExamSubmissions" component={ExamSubmissionsScreen} />
-      <SchoolStack.Screen name="ExamPaperView"   component={ExamPaperViewScreen} />
+      <SchoolStack.Screen name="ExamSubmissions"  component={ExamSubmissionsScreen} />
+      <SchoolStack.Screen name="ExamPaperView"    component={ExamPaperViewScreen} />
+      <SchoolStack.Screen name="ExamResultDetail" component={ExamResultDetailScreen} />
     </SchoolStack.Navigator>
   );
 }
