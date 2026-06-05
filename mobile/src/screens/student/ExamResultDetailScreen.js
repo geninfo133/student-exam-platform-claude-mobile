@@ -3,7 +3,7 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, Dimensions,
 } from 'react-native';
-import { PieChart } from 'react-native-chart-kit';
+import { PieChart, BarChart } from 'react-native-chart-kit';
 import api from '../../api/axios';
 import LoadingScreen from '../../components/LoadingScreen';
 import { deriveHWAnalysis, deriveOnlineAnalysis } from '../../utils/helpers';
@@ -322,64 +322,91 @@ export default function ExamResultDetailScreen({ route, navigation }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#4f46e5" />}
         >
           {/* Stat tiles */}
-          {!isGrading && (
-            <View style={s.statsRow}>
-              {isHW ? [
-                { label: 'Obtained', value: score,               color: '#059669', bg: '#d1fae5' },
-                { label: 'Total',    value: totalMarks,          color: '#4f46e5', bg: '#eef2ff' },
-                { label: 'Lost',     value: totalMarks - score,  color: '#dc2626', bg: '#fee2e2' },
-              ] : [
-                { label: 'Correct',    value: correct,    color: '#059669', bg: '#d1fae5' },
-                { label: 'Wrong',      value: incorrect,  color: '#dc2626', bg: '#fee2e2' },
-                { label: 'Unanswered', value: unanswered, color: '#94a3b8', bg: '#f1f5f9' },
-                { label: 'Percentile', value: analysis.percentile ? `${analysis.percentile}%` : '—', color: '#4f46e5', bg: '#eef2ff' },
-              ].map(({ label, value, color, bg }) => (
-                <View key={label} style={[s.statBox, { backgroundColor: bg }]}>
-                  <Text style={[s.statVal, { color }]}>{value}</Text>
-                  <Text style={[s.statLbl, { color: '#64748b' }]}>{label}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          {!isGrading && (() => {
+            const stats = isHW ? [
+              { label: 'Obtained', value: score,              color: '#059669', bg: '#d1fae5' },
+              { label: 'Total',    value: totalMarks,         color: '#4f46e5', bg: '#eef2ff' },
+              { label: 'Lost',     value: totalMarks - score, color: '#dc2626', bg: '#fee2e2' },
+            ] : [
+              { label: 'Correct',    value: correct,    color: '#059669', bg: '#d1fae5' },
+              { label: 'Wrong',      value: incorrect,  color: '#dc2626', bg: '#fee2e2' },
+              { label: 'Unanswered', value: unanswered, color: '#94a3b8', bg: '#f1f5f9' },
+              { label: 'Percentile', value: analysis.percentile ? `${analysis.percentile}%` : '—', color: '#4f46e5', bg: '#eef2ff' },
+            ];
+            return (
+              <View style={s.statsRow}>
+                {stats.map(({ label, value, color, bg }) => (
+                  <View key={label} style={[s.statBox, { backgroundColor: bg }]}>
+                    <Text style={[s.statVal, { color }]}>{value}</Text>
+                    <Text style={[s.statLbl, { color: '#64748b' }]}>{label}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
 
           {/* Handwritten: Score Overview donut + Question-wise bar */}
           {!isGrading && isHW && totalMarks > 0 && (
             <>
+              {/* Score Overview — donut via PieChart + white circle overlay */}
               <View style={[s.chartCard, { marginBottom: 12 }]}>
                 <View style={s.chartHeader}>
                   <Text style={s.chartTitle}>Score Overview</Text>
                 </View>
                 <View style={{ alignItems: 'center', paddingTop: 8 }}>
-                  <PieChart
-                    data={[
-                      { name: 'Scored',    count: Math.max(score, 0.001),             color: '#f59e0b', legendFontColor: '#334155', legendFontSize: 12 },
-                      { name: 'Remaining', count: Math.max(totalMarks - score, 0.001), color: '#e5e7eb', legendFontColor: '#334155', legendFontSize: 12 },
-                    ]}
-                    width={CHART_W}
-                    height={200}
-                    chartConfig={{ ...CHART_CFG, color: (o=1) => `rgba(245,158,11,${o})` }}
-                    accessor="count"
-                    backgroundColor="transparent"
-                    paddingLeft="15"
-                  />
+                  <View>
+                    <PieChart
+                      data={[
+                        { name: 'Remaining', count: Math.max(totalMarks - score, 0.001), color: '#e5e7eb', legendFontColor: '#64748b', legendFontSize: 12 },
+                        { name: 'Scored',    count: Math.max(score, 0.001),              color: '#f59e0b', legendFontColor: '#64748b', legendFontSize: 12 },
+                      ]}
+                      width={CHART_W}
+                      height={200}
+                      chartConfig={{ ...CHART_CFG, color: (o=1) => `rgba(245,158,11,${o})` }}
+                      accessor="count"
+                      backgroundColor="transparent"
+                      paddingLeft="15"
+                    />
+                    {/* White circle overlay to create donut effect */}
+                    <View style={{
+                      position: 'absolute', top: 8, left: CHART_W / 2 - 40,
+                      width: 80, height: 80, borderRadius: 40,
+                      backgroundColor: '#fff',
+                    }} />
+                  </View>
                 </View>
               </View>
 
-              {answers.length > 0 && (
-                <View style={[s.chartCard, { marginBottom: 12 }]}>
-                  <View style={s.chartHeader}>
-                    <Text style={s.chartTitle}>Question-wise Marks</Text>
+              {/* Question-wise Marks — single bar (Scored) per question */}
+              {answers.length > 0 && (() => {
+                const qLabels = answers.map((q, i) => `Q${q.question_number ?? i + 1}`);
+                const qScores = answers.map(q => Math.max(q.marks_awarded ?? 0, 0.001));
+                return (
+                  <View style={[s.chartCard, { marginBottom: 12 }]}>
+                    <View style={s.chartHeader}>
+                      <Text style={s.chartTitle}>Question-wise Marks</Text>
+                    </View>
+                    <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+                      <BarChart
+                        data={{
+                          labels: qLabels,
+                          datasets: [{ data: qScores }],
+                        }}
+                        width={CHART_W}
+                        height={200}
+                        chartConfig={{
+                          ...CHART_CFG,
+                          color: (o=1) => `rgba(99,102,241,${o})`,
+                          barPercentage: 0.5,
+                        }}
+                        fromZero
+                        withInnerLines={false}
+                        style={{ borderRadius: 8 }}
+                      />
+                    </View>
                   </View>
-                  <GroupedBarChart
-                    data={answers.map((q, i) => ({
-                      label: `Q${q.question_number ?? i + 1}`,
-                      obtained: q.marks_awarded ?? 0,
-                      total:    q.max_marks ?? 1,
-                    }))}
-                    height={200}
-                  />
-                </View>
-              )}
+                );
+              })()}
             </>
           )}
 
