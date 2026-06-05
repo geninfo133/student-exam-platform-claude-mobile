@@ -102,12 +102,13 @@ export default function ProgressScreen({ navigation }) {
     const score = Number(r.score || 0);
     const total = Number(r.total_marks || 0);
     return {
-      key:      `${r.subject_id}_${r.exam_category}_${r.source}`,
-      subject:  r.subject_name,
-      category: r.exam_category_display || r.exam_category || '—',
+      key:       `${r.subject_id}_${r.exam_category}_${r.source}`,
+      subject:   r.subject_name,
+      category:  r.exam_category_display || r.exam_category || '—',
       score, total,
-      pct:      total > 0 ? Math.round((score / total) * 100) : 0,
-      source:   r.source,
+      pct:       total > 0 ? Math.round((score / total) * 100) : 0,
+      source:    r.source,
+      result_id: r.result_id,
     };
   }).sort((a, b) => a.subject.localeCompare(b.subject) || a.category.localeCompare(b.category));
 
@@ -213,8 +214,20 @@ export default function ProgressScreen({ navigation }) {
               {/* Data rows */}
               {rows.map((row, idx) => {
                 const g = getGrade(row.pct);
+                const onPress = () => {
+                  if (!row.result_id) return;
+                  navigation.navigate('ExamResultDetail', {
+                    resultId: row.result_id,
+                    type: row.source === 'handwritten' ? 'handwritten' : 'online',
+                  });
+                };
                 return (
-                  <View key={row.key} style={[s.trow, idx % 2 === 1 && s.trowAlt]}>
+                  <TouchableOpacity
+                    key={row.key}
+                    style={[s.trow, idx % 2 === 1 && s.trowAlt]}
+                    onPress={onPress}
+                    activeOpacity={row.result_id ? 0.6 : 1}
+                  >
                     <Text style={[s.tcell, { width: COL.num, textAlign: 'center', color: '#94a3b8' }]}>{idx + 1}</Text>
 
                     <View style={[s.tcellInner, { width: COL.subject }]}>
@@ -242,8 +255,11 @@ export default function ProgressScreen({ navigation }) {
                       <View style={[s.gradeBadge, { backgroundColor: g.bg }]}>
                         <Text style={[s.gradeText, { color: g.color }]}>Grade {g.label}</Text>
                       </View>
+                      {row.result_id ? (
+                        <Text style={{ fontSize: 9, color: '#6366f1', marginTop: 2 }}>View →</Text>
+                      ) : null}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
 
