@@ -61,7 +61,6 @@ export default function SchoolDashboardScreen({ navigation }) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#4f46e5" />}
     >
       <ScreenHeader
-        navigation={navigation}
         label="School Administration"
         title={`${greeting()}, ${user?.first_name || user?.username}!`}
         subtitle="Here's what's happening at your institution today."
