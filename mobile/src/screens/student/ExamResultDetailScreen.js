@@ -3,7 +3,8 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   RefreshControl, Dimensions,
 } from 'react-native';
-import { PieChart, BarChart } from 'react-native-chart-kit';
+import { BarChart, PieChart } from 'react-native-chart-kit';
+import Svg, { Circle, G } from 'react-native-svg';
 import api from '../../api/axios';
 import LoadingScreen from '../../components/LoadingScreen';
 import { deriveHWAnalysis, deriveOnlineAnalysis } from '../../utils/helpers';
@@ -11,70 +12,115 @@ import { deriveHWAnalysis, deriveOnlineAnalysis } from '../../utils/helpers';
 const W = Dimensions.get('window').width;
 const CHART_W = W - 48;
 
-function GroupedBarChart({ data, height = 200 }) {
+function DonutChart({ scored, total, size = 180, strokeWidth = 36 }) {
+  const r = (size - strokeWidth) / 2;
+  const circ = 2 * Math.PI * r;
+  const scoredPct = total > 0 ? scored / total : 0;
+  const center = size / 2;
+  const scoredColor = '#f59e0b';
+  const remainColor = '#e5e7eb';
+  const remainPct = 1 - scoredPct;
+
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <Svg width={size} height={size}>
+        <G rotation="-90" origin={`${center},${center}`}>
+          {/* Remaining arc (background) */}
+          <Circle
+            cx={center} cy={center} r={r}
+            fill="none" stroke={remainColor} strokeWidth={strokeWidth}
+            strokeDasharray={`${circ * remainPct} ${circ * scoredPct}`}
+            strokeLinecap="butt"
+          />
+          {/* Scored arc */}
+          <Circle
+            cx={center} cy={center} r={r}
+            fill="none" stroke={scoredColor} strokeWidth={strokeWidth}
+            strokeDasharray={`${circ * scoredPct} ${circ * remainPct}`}
+            strokeDashoffset={-(circ * remainPct)}
+            strokeLinecap="butt"
+          />
+        </G>
+      </Svg>
+      {/* Legend */}
+      <View style={{ flexDirection: 'row', gap: 20, marginTop: 8 }}>
+        {[
+          { color: remainColor, label: 'Remaining' },
+          { color: scoredColor, label: 'Scored' },
+        ].map(({ color, label }) => (
+          <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+            <View style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: color }} />
+            <Text style={{ fontSize: 12, color: '#64748b' }}>{label}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+const BAR_W = 14;
+const GROUP_W = BAR_W * 2 + 6 + 16; // two bars + gap + padding
+
+function GroupedBarChart({ data, height = 220 }) {
   if (!data || data.length === 0) return null;
   const maxVal = Math.max(...data.flatMap(d => [d.obtained, d.total]), 1);
-  const chartH = height - 40; // leave room for labels
+  const chartH = height - 44;
   const ySteps = 4;
 
   return (
-    <View style={{ padding: 16 }}>
+    <View style={{ paddingVertical: 12 }}>
       <View style={{ flexDirection: 'row', height }}>
         {/* Y-axis */}
-        <View style={{ width: 32, justifyContent: 'space-between', paddingBottom: 24 }}>
+        <View style={{ width: 28, justifyContent: 'space-between', paddingBottom: 28 }}>
           {Array.from({ length: ySteps + 1 }).map((_, i) => {
             const val = Math.round(maxVal * (1 - i / ySteps));
             return (
-              <Text key={i} style={{ fontSize: 10, color: '#94a3b8', textAlign: 'right' }}>
+              <Text key={i} style={{ fontSize: 9, color: '#94a3b8', textAlign: 'right', paddingRight: 2 }}>
                 {val}
               </Text>
             );
           })}
         </View>
 
-        {/* Bars area */}
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end',
-                       justifyContent: 'space-around', paddingBottom: 24, borderLeftWidth: 1,
-                       borderBottomWidth: 1, borderColor: '#f1f5f9', marginLeft: 4 }}>
+        {/* Scrollable bars area */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            flexDirection: 'row', alignItems: 'flex-end',
+            paddingBottom: 28, paddingHorizontal: 4,
+            borderLeftWidth: 1, borderBottomWidth: 1, borderColor: '#e2e8f0',
+          }}
+        >
           {data.map(({ label, obtained, total }) => (
-            <View key={label} style={{ alignItems: 'center', gap: 4 }}>
-              {/* Two bars side by side */}
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
-                <View style={{ width: 28, alignItems: 'center' }}>
-                  {obtained > 0 && (
-                    <Text style={{ fontSize: 9, color: '#6366f1', fontWeight: '800', marginBottom: 2 }}>
-                      {obtained}
-                    </Text>
-                  )}
+            <View key={label} style={{ alignItems: 'center', width: GROUP_W }}>
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 2 }}>
+                <View style={{ width: BAR_W, alignItems: 'center' }}>
                   <View style={{
-                    width: 28,
-                    height: Math.max((obtained / maxVal) * chartH, obtained > 0 ? 4 : 0),
+                    width: BAR_W,
+                    height: Math.max((obtained / maxVal) * chartH, obtained > 0 ? 3 : 0),
                     backgroundColor: '#6366f1',
-                    borderRadius: 3,
+                    borderRadius: 2,
                   }} />
                 </View>
-                <View style={{ width: 28, alignItems: 'center' }}>
-                  {total > 0 && (
-                    <Text style={{ fontSize: 9, color: '#94a3b8', fontWeight: '800', marginBottom: 2 }}>
-                      {total}
-                    </Text>
-                  )}
+                <View style={{ width: BAR_W, alignItems: 'center' }}>
                   <View style={{
-                    width: 28,
-                    height: Math.max((total / maxVal) * chartH, 4),
-                    backgroundColor: '#e2e8f0',
-                    borderRadius: 3,
+                    width: BAR_W,
+                    height: Math.max((total / maxVal) * chartH, 3),
+                    backgroundColor: '#e0e7ff',
+                    borderRadius: 2,
                   }} />
                 </View>
               </View>
-              <Text style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{label}</Text>
+              <Text style={{ fontSize: 9, color: '#94a3b8', marginTop: 3 }}>{label}</Text>
             </View>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
       {/* Legend */}
-      <View style={{ flexDirection: 'row', gap: 16, marginTop: 4, paddingLeft: 36 }}>
+      <View style={{ flexDirection: 'row', gap: 16, marginTop: 4, paddingLeft: 32 }}>
         {[{ color: '#6366f1', label: 'Obtained' }, { color: '#e2e8f0', label: 'Total' }].map(({ color, label }) => (
           <View key={label} style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
             <View style={{ width: 12, height: 12, borderRadius: 2, backgroundColor: color }} />
@@ -348,65 +394,32 @@ export default function ExamResultDetailScreen({ route, navigation }) {
           {/* Handwritten: Score Overview donut + Question-wise bar */}
           {!isGrading && isHW && totalMarks > 0 && (
             <>
-              {/* Score Overview — donut via PieChart + white circle overlay */}
+              {/* Score Overview — proper SVG donut */}
               <View style={[s.chartCard, { marginBottom: 12 }]}>
                 <View style={s.chartHeader}>
                   <Text style={s.chartTitle}>Score Overview</Text>
                 </View>
-                <View style={{ alignItems: 'center', paddingTop: 8 }}>
-                  <View>
-                    <PieChart
-                      data={[
-                        { name: 'Remaining', count: Math.max(totalMarks - score, 0.001), color: '#e5e7eb', legendFontColor: '#64748b', legendFontSize: 12 },
-                        { name: 'Scored',    count: Math.max(score, 0.001),              color: '#f59e0b', legendFontColor: '#64748b', legendFontSize: 12 },
-                      ]}
-                      width={CHART_W}
-                      height={200}
-                      chartConfig={{ ...CHART_CFG, color: (o=1) => `rgba(245,158,11,${o})` }}
-                      accessor="count"
-                      backgroundColor="transparent"
-                      paddingLeft="15"
-                    />
-                    {/* White circle overlay to create donut effect */}
-                    <View style={{
-                      position: 'absolute', top: 8, left: CHART_W / 2 - 40,
-                      width: 80, height: 80, borderRadius: 40,
-                      backgroundColor: '#fff',
-                    }} />
-                  </View>
+                <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+                  <DonutChart scored={score} total={totalMarks} size={200} strokeWidth={48} />
                 </View>
               </View>
 
-              {/* Question-wise Marks — single bar (Scored) per question */}
-              {answers.length > 0 && (() => {
-                const qLabels = answers.map((q, i) => `Q${q.question_number ?? i + 1}`);
-                const qScores = answers.map(q => Math.max(q.marks_awarded ?? 0, 0.001));
-                return (
-                  <View style={[s.chartCard, { marginBottom: 12 }]}>
-                    <View style={s.chartHeader}>
-                      <Text style={s.chartTitle}>Question-wise Marks</Text>
-                    </View>
-                    <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-                      <BarChart
-                        data={{
-                          labels: qLabels,
-                          datasets: [{ data: qScores }],
-                        }}
-                        width={CHART_W}
-                        height={200}
-                        chartConfig={{
-                          ...CHART_CFG,
-                          color: (o=1) => `rgba(99,102,241,${o})`,
-                          barPercentage: 0.5,
-                        }}
-                        fromZero
-                        withInnerLines={false}
-                        style={{ borderRadius: 8 }}
-                      />
-                    </View>
+              {/* Question-wise Marks — Max + Scored bars per question (matches web) */}
+              {answers.length > 0 && (
+                <View style={[s.chartCard, { marginBottom: 12 }]}>
+                  <View style={s.chartHeader}>
+                    <Text style={s.chartTitle}>Question-wise Marks</Text>
                   </View>
-                );
-              })()}
+                  <GroupedBarChart
+                    data={answers.map((q, i) => ({
+                      label: `Q${q.question_number ?? i + 1}`,
+                      obtained: q.marks_awarded ?? 0,
+                      total:    q.max_marks ?? 1,
+                    }))}
+                    height={200}
+                  />
+                </View>
+              )}
             </>
           )}
 
