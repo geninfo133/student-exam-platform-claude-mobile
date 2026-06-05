@@ -36,11 +36,16 @@ export default function StudentAnalyticsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [error, setError] = useState('');
   const load = useCallback(async () => {
     try {
       const res = await api.get(`/api/analytics/student/?period=${period.value}`);
       setData(res.data);
-    } catch { setData(null); }
+      setError('');
+    } catch (e) {
+      setData(null);
+      setError(e?.message || 'API error');
+    }
     finally { setLoading(false); setRefreshing(false); }
   }, [period]);
 
@@ -123,6 +128,19 @@ export default function StudentAnalyticsScreen({ navigation }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#4f46e5" />}
           showsVerticalScrollIndicator={false}
         >
+          {/* Debug */}
+          {error ? (
+            <View style={{ backgroundColor: '#fee2e2', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <Text style={{ color: '#dc2626', fontSize: 12, fontWeight: '700' }}>API Error: {error}</Text>
+            </View>
+          ) : null}
+          {!error && data ? (
+            <View style={{ backgroundColor: '#d1fae5', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+              <Text style={{ color: '#065f46', fontSize: 12, fontWeight: '700' }}>
+                Data OK — exams:{ov.total_exams} subjects:{subjects.length} trends:{data?.trends?.length} barData:{barData ? 'yes' : 'no'} lineData:{lineData ? 'yes' : 'no'}
+              </Text>
+            </View>
+          ) : null}
           {/* Stat boxes */}
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 14 }}>
             <StatBox label="Exams" value={totalExams} color="#4f46e5" bg="#eef2ff" />
