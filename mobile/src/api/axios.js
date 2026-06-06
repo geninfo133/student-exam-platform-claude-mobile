@@ -35,7 +35,7 @@ api.interceptors.response.use(
       try {
         const refresh = await AsyncStorage.getItem('refresh_token');
         if (refresh) {
-          const res = await axios.post(`${BASE_URL}/api/token/refresh/`, { refresh }, { timeout: 8000 });
+          const res = await axios.post(`${BASE_URL}/api/auth/refresh/`, { refresh }, { timeout: 8000 });
           const newAccess = res.data.access;
           await AsyncStorage.setItem('access_token', newAccess);
           original.headers.Authorization = `Bearer ${newAccess}`;

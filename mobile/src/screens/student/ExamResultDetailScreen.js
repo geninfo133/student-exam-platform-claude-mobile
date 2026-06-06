@@ -149,24 +149,6 @@ function getGradeInfo(pct) {
   return               { grade: 'F',  color: '#dc2626', bg: '#fee2e2', border: '#fca5a5' };
 }
 
-function ScoreRing({ pct, size = 130, stroke = 11 }) {
-  const r = (size - stroke) / 2;
-  const circ = 2 * Math.PI * r;
-  const fill = circ * (1 - pct / 100);
-  const g = getGradeInfo(pct);
-  return (
-    <View style={{ width: size, height: size }}>
-      <svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e293b" strokeWidth={stroke} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none"
-          stroke={g.color} strokeWidth={stroke}
-          strokeDasharray={circ} strokeDashoffset={fill}
-          strokeLinecap="round" />
-      </svg>
-    </View>
-  );
-}
-
 // Custom score ring using View (no SVG dependency)
 function RingView({ pct, size = 110 }) {
   const g = getGradeInfo(pct);
@@ -205,15 +187,14 @@ export default function ExamResultDetailScreen({ route, navigation }) {
 
   const load = useCallback(async () => {
     try {
-      if (type === 'handwritten') {
-        const res = await api.get(`/api/handwritten/${resultId}/`);
-        setResult(res.data);
-        setAnswers(res.data?.grading_data?.questions || []);
-      } else {
-        const res = await api.get(`/api/exams/${resultId}/result/`);
-        setResult(res.data);
-        setAnswers(res.data?.answers || []);
-      }
+      const url = type === 'handwritten'
+        ? `/api/handwritten/${resultId}/`
+        : `/api/exams/${resultId}/result/`;
+      const res = await api.get(url);
+      setResult(res.data);
+      setAnswers(type === 'handwritten'
+        ? (res.data?.grading_data?.questions || [])
+        : (res.data?.answers || []));
     } catch { }
     finally { setLoading(false); setRefreshing(false); }
   }, [resultId, type]);

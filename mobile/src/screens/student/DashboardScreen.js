@@ -212,7 +212,15 @@ export default function DashboardScreen({ navigation }) {
               ? new Date(exam._date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
               : '';
             return (
-              <View key={`${exam._type}-${exam.id}`} style={s.recentCard}>
+              <TouchableOpacity
+                key={`${exam._type}-${exam.id}`}
+                style={s.recentCard}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('ExamResultDetail', {
+                  resultId: exam.id,
+                  type: isHw ? 'handwritten' : 'online',
+                })}
+              >
                 <ScoreRing pct={pct} />
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -224,7 +232,7 @@ export default function DashboardScreen({ navigation }) {
                   <Text style={s.recentSub}>{!isHw && exam.chapter_name ? `${exam.chapter_name} · ` : ''}{date}</Text>
                 </View>
                 <Text style={s.recentArrow}>›</Text>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}

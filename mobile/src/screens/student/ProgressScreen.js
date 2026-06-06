@@ -52,7 +52,7 @@ const GRADE_LEGEND = [
 ];
 
 // Column widths
-const COL = { num: 28, subject: 130, exam: 100, max: 48, obtained: 64, pct: 90, grade: 76 };
+const COL = { num: 28, subject: 130, exam: 100, max: 48, obtained: 64, pct: 90, grade: 84 };
 const TOTAL_W = Object.values(COL).reduce((a, b) => a + b, 0);
 
 function PctBar({ pct }) {
@@ -191,7 +191,7 @@ export default function ProgressScreen({ navigation }) {
         />
       ) : (
         <View style={s.tableWrap}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={true}>
             <View style={{ width: TOTAL_W }}>
 
               {/* Table header */}
