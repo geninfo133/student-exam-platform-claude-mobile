@@ -117,25 +117,31 @@ export default function TeacherAnalytics() {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <div className="flex gap-2 flex-wrap">
-            {PERIOD_OPTIONS.map(opt => (
-              <button key={opt.value} onClick={() => setPeriod(opt.value)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition ${
-                  period === opt.value
-                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
-                    : 'border-gray-200 text-gray-600 bg-white hover:border-indigo-300'
-                }`}>
-                {opt.label}
-              </button>
-            ))}
+        <div className="flex flex-wrap items-end gap-5 mb-6">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Period</label>
+            <div className="flex gap-2 flex-wrap">
+              {PERIOD_OPTIONS.map(opt => (
+                <button key={opt.value} onClick={() => setPeriod(opt.value)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold border-2 transition ${
+                    period === opt.value
+                      ? 'bg-indigo-600 border-indigo-600 text-white shadow-sm'
+                      : 'border-gray-200 text-gray-600 bg-white hover:border-indigo-300'
+                  }`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
           {subjects?.length > 0 && (
-            <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)}
-              className="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white text-gray-700 focus:outline-none focus:border-indigo-400 transition">
-              <option value="">All Subjects</option>
-              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Subject</label>
+              <select value={subjectFilter} onChange={e => setSubjectFilter(e.target.value)}
+                className="px-4 py-2 border-2 border-gray-200 rounded-xl text-sm bg-white text-gray-700 focus:outline-none focus:border-indigo-400 transition">
+                <option value="">All Subjects</option>
+                {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
           )}
         </div>
 
