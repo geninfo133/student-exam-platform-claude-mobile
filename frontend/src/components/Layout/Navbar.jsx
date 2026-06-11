@@ -203,6 +203,7 @@ export default function Navbar() {
         { to: '/teacher/handwritten', label: 'Handwritten', icon: 'handwritten' },
       ]} />
       <NavLink to="/teacher/progress-card" label="Progress Card" icon="progress" />
+      <NavLink to="/teacher/analytics" label="Analytics" icon="history" />
     </>
   );
 
@@ -223,6 +224,7 @@ export default function Navbar() {
         { to: '/teacher/papers', label: 'Manage Papers', icon: 'papers' },
       ]} />
       <NavLink to="/school/progress-card" label="Progress Card" icon="progress" />
+      <NavLink to="/teacher/analytics" label="Analytics" icon="history" />
     </>
   );
 
