@@ -509,16 +509,32 @@ export default function TeacherAnalyticsScreen({ navigation }) {
       </ScreenHeader>
 
       {/* Period + Subject filters */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.filterBar} contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
-        {PERIODS.map(opt => (
-          <TouchableOpacity
-            key={opt.value}
-            style={[s.filterChip, period === opt.value && s.filterChipActive]}
-            onPress={() => setPeriod(opt.value)}
-          >
-            <Text style={[s.filterChipText, period === opt.value && s.filterChipTextActive]}>{opt.label}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={[s.filterBar, { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 10 }]}>
+        <Text style={s.filterLabel}>Period:</Text>
+        {PERIODS.map(opt => {
+          const active = period === opt.value;
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              onPress={() => setPeriod(opt.value)}
+              style={{
+                minWidth: 64,
+                paddingHorizontal: 14,
+                paddingVertical: 8,
+                borderRadius: 20,
+                borderWidth: 1.5,
+                borderColor: active ? '#4f46e5' : '#e2e8f0',
+                backgroundColor: active ? '#4f46e5' : '#f8fafc',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: '700', color: active ? '#ffffff' : '#334155' }}>
+                {String(opt.label)}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
         {subjects.length > 0 && (
           <TouchableOpacity
             style={[s.filterChip, subjectFilter && s.filterChipActive]}
@@ -529,7 +545,7 @@ export default function TeacherAnalyticsScreen({ navigation }) {
             </Text>
           </TouchableOpacity>
         )}
-      </ScrollView>
+      </View>
 
       <ScrollView
         contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
@@ -844,6 +860,7 @@ const s = StyleSheet.create({
   pillVal:      { color: '#fff', fontSize: 16, fontWeight: '800' },
   pillLbl:      { color: 'rgba(255,255,255,0.5)', fontSize: 10, marginTop: 2 },
   filterBar:    { backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  filterLabel:  { fontSize: 12, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 2, alignSelf: 'center' },
   filterChip:   { borderWidth: 1.5, borderColor: '#e2e8f0', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#f8fafc' },
   filterChipActive: { borderColor: '#4f46e5', backgroundColor: '#4f46e5' },
   filterChipText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
