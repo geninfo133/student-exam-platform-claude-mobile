@@ -268,13 +268,20 @@ export default function ExamResult() {
                   <div className="p-5">
                     <ResponsiveContainer width="100%" height={220}>
                       <PieChart>
-                        <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value"
-                          label={({ name, value }) => `${name}: ${value}`}>
+                        <Pie data={pieData} cx="50%" cy="50%" outerRadius={75} innerRadius={35}
+                          dataKey="value" labelLine={false}>
                           {pieData.map((_, i) => (
                             <Cell key={i} fill={['#10b981', '#ef4444', '#94a3b8'][i]} />
                           ))}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip formatter={(v, n) => [`${v}`, n]} />
+                        <Legend
+                          formatter={(value, entry) => (
+                            <span className="text-xs text-gray-600 font-medium">
+                              {value}: {entry.payload.value}
+                            </span>
+                          )}
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
